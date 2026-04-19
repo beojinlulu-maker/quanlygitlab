@@ -1,0 +1,971 @@
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { initializeApp } from 'firebase/app';
+import { 
+  getAuth, 
+  signInAnonymously, 
+  signInWithCustomToken,
+  onAuthStateChanged 
+} from 'firebase/auth';
+import { 
+  getFirestore, 
+  doc, 
+  setDoc, 
+  onSnapshot, 
+  collection 
+} from 'firebase/firestore';
+import { 
+  RefreshCw, 
+  ExternalLink, 
+  Database, 
+  UserCheck, 
+  Zap, 
+  AlertTriangle,
+  Tag,
+  Wrench,
+  Layout,
+  User,
+  ShieldCheck,
+  Clock,
+  ClipboardList,
+  History,
+  CheckCircle2,
+  Send,
+  Lock,
+  UserPlus,
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  BarChart3,
+  Activity,
+  Briefcase,
+  ArrowRight,
+  Hash
+} from 'lucide-react';
+
+// --- Cấu hình Chung ---
+const GITLAB_TOKEN = 'XÓA_VÌ_LÝ_DO_BẢO_MẬT_VÀ_TRÁNH_QUÉT_MÃ';
+const GITLAB_BASE_URL = 'https://gitlab.com/api/v4';
+const GROUP_IDS = ['4922129', '3590912', '58863801'];
+const ACCOUNTING_PROJECT_ID = '44977878'; 
+const CREATED_AFTER = '2026-01-01T00:00:00Z';
+const WORKING_HOURS_PER_DAY = 8;
+const EXCLUDED_USERS = []; // Thêm danh sách user loại trừ nếu cần
+
+const firebaseConfig = JSON.parse(__firebase_config);
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'gitlab-task-tracker';
+
+// --- Hàm hỗ trợ định dạng ngày ---
+const formatDateVN = (dateStr) => {
+  if (!dateStr) return '---';
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    return d.toLocaleDateString('vi-VN', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    });
+  } catch (e) {
+    return dateStr;
+  }
+};
+
+const checkLabels = (labels) => {
+  if (!labels || labels.length === 0) return false;
+  const keywords = ['review', 'revision'];
+  return labels.some(label => {
+    const lowerLabel = label.toLowerCase();
+    return keywords.some(keyword => lowerLabel.includes(keyword));
+  });
+};
+
+const getDevFromNotes = (notes) => {
+  if (!notes || !Array.isArray(notes) || notes.length === 0) return 'N/A';
+  const devNote = notes.find(note => note.author && !EXCLUDED_USERS.includes(note.author.username));
+  return devNote ? devNote.author.username : 'N/A';
+};
+
+const extractGitLabLinks = (notes) => {
+  if (!notes || !Array.isArray(notes)) return [];
+  const foundLinks = [];
+  const regex = /(?:https:\/\/gitlab\.com\/([\w\-\.\/]+)\/-\/(?:work_items|issues|merge_requests)\/(\d+))|([\w\-\.\/]+)#(\d+)/g;
+
+  notes.forEach(note => {
+    if (!note.body) return;
+    let match;
+    while ((match = regex.exec(note.body)) !== null) {
+      let pPath = match[1] || match[3];
+      let pId = match[2] || match[4];
+      if (pPath && pId) {
+        const fullUrl = pPath.startsWith('http') ? pPath : `https://gitlab.com/${pPath}/-/work_items/${pId}`;
+        if (!foundLinks.includes(fullUrl)) {
+          foundLinks.push(fullUrl);
+        }
+      }
+    }
+  });
+  return foundLinks;
+};
+
+const isOverdueCreated = (createdAt) => {
+  const created = new Date(createdAt);
+  const now = new Date();
+  const diffTime = Math.abs(now - created);
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  return diffDays > 5;
+};
+
+const getDaysSinceUpdate = (updatedAt) => {
+  const updated = new Date(updatedAt);
+  const now = new Date();
+  const diffTime = Math.abs(now - updated);
+  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+  return diffDays;
+};
+
+// --- Thành phần Biểu đồ Tải trọng (Workload Chart) ---
+const WorkloadChart = ({ tasks, cloudData }) => {
+  const [weekOffset, setWeekOffset] = useState(0);
+  const [selectedDayIndex, setSelectedDayIndex] = useState(new Date().getDay() === 0 ? 6 : new Date().getDay() - 1);
+
+  const { weekData, weekRangeText } = useMemo(() => {
+    const now = new Date();
+    const startOfWeek = new Date(now);
+    const day = startOfWeek.getDay();
+    const diff = startOfWeek.getDate() - day + (day === 0 ? -6 : 1) + (weekOffset * 7);
+    startOfWeek.setDate(diff);
+    startOfWeek.setHours(0, 0, 0, 0);
+
+    const endOfWeek = new Date(startOfWeek);
+    endOfWeek.setDate(startOfWeek.getDate() + 6);
+
+    const days = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(startOfWeek);
+      d.setDate(startOfWeek.getDate() + i);
+      days.push({
+        dateStr: d.toLocaleDateString('en-CA'),
+        label: d.toLocaleDateString('vi-VN', { weekday: 'short', day: '2-digit', month: '2-digit' }),
+        fullLabel: d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+        totalMinutes: 0,
+        isToday: d.toLocaleDateString('en-CA') === now.toLocaleDateString('en-CA'),
+        tasks: [] 
+      });
+    }
+
+    tasks.forEach(task => {
+      const meta = cloudData[task.id];
+      if (meta && meta.startDate && meta.endDate && meta.estimate) {
+        const start = new Date(meta.startDate);
+        const end = new Date(meta.endDate);
+        const estimate = parseInt(meta.estimate) || 0;
+        
+        const diffTime = Math.abs(end - start);
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+        const minutesPerDay = estimate / diffDays;
+
+        days.forEach(dayObj => {
+          const currentDate = new Date(dayObj.dateStr);
+          if (currentDate >= start && currentDate <= end) {
+            dayObj.totalMinutes += minutesPerDay;
+            dayObj.tasks.push({
+              title: task.title,
+              iid: task.iid,
+              minutes: minutesPerDay,
+              url: task.web_url,
+              projectName: task.projectName || 'Dự án'
+            });
+          }
+        });
+      }
+    });
+
+    const rangeText = `${formatDateVN(startOfWeek)} - ${formatDateVN(endOfWeek)}`;
+    return { weekData: days, weekRangeText: rangeText };
+  }, [tasks, cloudData, weekOffset]);
+
+  const maxMinutes = WORKING_HOURS_PER_DAY * 60;
+  const currentSelectedDay = weekData[selectedDayIndex];
+
+  return (
+    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 mb-6">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg">
+            <BarChart3 size={20} />
+          </div>
+          <div>
+            <h2 className="text-lg font-bold text-slate-800">Kế hoạch công việc chi tiết</h2>
+            <p className="text-xs text-slate-500 font-medium">Tích chọn ngày để xem danh sách task</p>
+          </div>
+        </div>
+        
+        <div className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-xl border border-slate-200">
+          <button onClick={() => setWeekOffset(prev => prev - 1)} className="p-1.5 hover:bg-white hover:shadow-sm rounded-lg transition-all text-slate-600 border border-transparent hover:border-slate-100"><ChevronLeft size={18} /></button>
+          <div className="px-4 min-w-[160px] text-center"><span className="text-sm font-black text-indigo-600 tracking-tight">{weekRangeText}</span></div>
+          <button onClick={() => setWeekOffset(prev => prev + 1)} className="p-1.5 hover:bg-white hover:shadow-sm rounded-lg transition-all text-slate-600 border border-transparent hover:border-slate-100"><ChevronRight size={18} /></button>
+        </div>
+      </div>
+
+      <div className="flex flex-col lg:flex-row gap-8 min-h-[320px]">
+        <div className="w-full lg:w-1/3 flex flex-col gap-4 border-r border-slate-100 pr-0 lg:pr-8">
+           <div className="grid grid-cols-7 gap-2 items-end h-48">
+            {weekData.map((day, idx) => {
+              const percentage = Math.min((day.totalMinutes / maxMinutes) * 100, 100);
+              const isOverloaded = day.totalMinutes > maxMinutes;
+              const isSelected = selectedDayIndex === idx;
+
+              return (
+                <div 
+                  key={idx} 
+                  onClick={() => setSelectedDayIndex(idx)}
+                  className={`flex flex-col items-center h-full cursor-pointer transition-all rounded-t-xl p-1 ${isSelected ? 'bg-indigo-50/50 ring-2 ring-indigo-500 ring-offset-2' : 'hover:bg-slate-50'}`}
+                >
+                  <div className="w-full flex-1 bg-slate-100 rounded-t-lg relative overflow-hidden flex flex-col justify-end">
+                    <div 
+                      className={`w-full transition-all duration-500 ease-out rounded-t-sm ${isOverloaded ? 'bg-rose-500 shadow-sm' : percentage > 80 ? 'bg-amber-500' : 'bg-indigo-500'}`} 
+                      style={{ height: `${percentage}%` }}
+                    />
+                  </div>
+                  <div className={`mt-2 text-center transition-colors ${day.isToday ? 'text-indigo-600 font-black' : isSelected ? 'text-indigo-700 font-bold' : 'text-slate-400 font-medium'}`}>
+                    <div className="text-[10px] uppercase tracking-tighter">{day.label.split(' ')[0]}</div>
+                    <div className="text-[10px]">{day.label.split(' ')[1]}</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div className="bg-slate-50 rounded-xl p-3 border border-slate-100 mt-2">
+             <div className="flex items-center justify-between text-[11px] font-bold text-slate-500">
+                <span>Hạn mức: {WORKING_HOURS_PER_DAY}h/ngày</span>
+                <span className={currentSelectedDay.totalMinutes > maxMinutes ? 'text-rose-600' : 'text-indigo-600'}>
+                  Chọn: {(currentSelectedDay.totalMinutes / 60).toFixed(1)}h
+                </span>
+             </div>
+          </div>
+        </div>
+
+        <div className="w-full lg:w-2/3 flex flex-col">
+          <div className="flex items-center justify-between mb-4 pb-2 border-b border-slate-100">
+             <div className="flex items-center gap-2">
+                <CalendarDays size={18} className="text-indigo-600" />
+                <span className="font-black text-slate-800 uppercase tracking-wide text-sm">Task ngày {currentSelectedDay.fullLabel}</span>
+                <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded-full text-[10px] font-black">{currentSelectedDay.tasks.length} task</span>
+             </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto max-h-[300px] pr-2 space-y-3 custom-scrollbar">
+            {currentSelectedDay.tasks.length > 0 ? (
+              currentSelectedDay.tasks.map((t, tIdx) => (
+                <div key={tIdx} className="group flex items-start gap-4 p-3 bg-white border border-slate-200 rounded-xl hover:border-indigo-300 hover:shadow-md transition-all">
+                  <div className="mt-1 p-2 bg-slate-50 text-slate-400 group-hover:bg-indigo-50 group-hover:text-indigo-500 rounded-lg transition-colors">
+                    <Briefcase size={16} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <a href={t.url} target="_blank" rel="noreferrer" className="text-xs font-black text-indigo-600 hover:underline flex items-center gap-1 shrink-0">
+                        #{t.iid} <ExternalLink size={10} />
+                      </a>
+                      <span className="text-[10px] text-slate-400 font-bold truncate">• {t.projectName}</span>
+                    </div>
+                    <a href={t.url} target="_blank" rel="noreferrer" className="text-sm font-bold text-slate-800 leading-snug hover:text-indigo-600 transition-colors line-clamp-2">
+                      {t.title}
+                    </a>
+                  </div>
+                  <div className="shrink-0 flex flex-col items-end">
+                    <div className="text-[11px] font-black text-slate-700">{(t.minutes / 60).toFixed(1)}h</div>
+                    <div className="text-[9px] text-slate-400 font-bold uppercase tracking-tighter">Phân bổ</div>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="flex flex-col items-center justify-center py-12 text-slate-400">
+                 <div className="p-4 bg-slate-50 rounded-full mb-3"><Activity size={32} className="opacity-20" /></div>
+                 <p className="text-sm font-medium italic">Không có task nào được lập kế hoạch cho ngày này</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// --- Bảng hoạt động hôm nay ---
+const ActivityMiniTable = ({ actions }) => (
+  <div className="bg-white rounded-xl shadow-md border border-emerald-200 overflow-hidden flex flex-col h-full">
+    <div className="px-4 py-3 bg-emerald-600 text-white flex items-center justify-between shrink-0">
+      <h3 className="font-bold flex items-center gap-2 text-sm uppercase"><Activity size={16} /> Các task đã thực hiện hôm nay ({actions.length})</h3>
+    </div>
+    <div className="overflow-y-auto flex-1 max-h-[500px]">
+      <table className="w-full text-xs text-left border-collapse table-fixed">
+        <thead className="bg-emerald-50 sticky top-0 z-10 text-emerald-800 font-bold uppercase text-[9px]">
+          <tr>
+            <th className="px-3 py-2 border-b w-8 text-center">#</th>
+            <th className="px-3 py-2 border-b">Task / Hoạt động</th>
+            <th className="px-3 py-2 border-b w-20 text-center">Giờ</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100">
+          {actions.length > 0 ? actions.map((act, i) => (
+            <tr key={act.id} className="hover:bg-emerald-50/30">
+              <td className="px-2 py-3 text-slate-400 text-center align-top">{i+1}</td>
+              <td className="px-2 py-3 align-top">
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <a href={act.web_url} target="_blank" rel="noreferrer" className="text-blue-600 font-bold hover:underline shrink-0 flex items-center gap-1">
+                      <Hash size={10} /> {act.iid !== 'N/A' ? act.iid : '---'}
+                    </a>
+                    <span className="text-[8px] bg-indigo-50 text-indigo-600 px-1 py-0.5 rounded border border-indigo-100 font-bold truncate max-w-[80px]">{act.projectName}</span>
+                  </div>
+                  <div className="text-slate-700 font-bold leading-tight break-words line-clamp-2 italic text-slate-500">"{act.title}"</div>
+                  <div className="flex flex-wrap gap-1 mt-1">
+                     {act.action.includes('comment') && <span className="px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 border border-blue-200 text-[8px] font-black uppercase">Comment</span>}
+                     {act.action.includes('created') && <span className="px-1.5 py-0.5 rounded bg-green-100 text-green-700 border border-green-200 text-[8px] font-black uppercase">Create</span>}
+                     {act.action.includes('assigned') && <span className="px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 border border-purple-200 text-[8px] font-black uppercase">Assign</span>}
+                  </div>
+                </div>
+              </td>
+              <td className="px-2 py-3 align-top text-center">
+                <div className="text-emerald-700 font-black text-[10px] bg-emerald-50 rounded-full py-0.5">
+                  {new Date(act.time).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                </div>
+              </td>
+            </tr>
+          )) : (
+            <tr><td colSpan="3" className="px-4 py-8 text-center text-slate-400 italic">Chưa có hoạt động</td></tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  </div>
+);
+
+// --- Quản lý Task chính ---
+const GitLabTaskManager = ({ targetUser, user, cloudData, onBack }) => {
+  const [tasks, setTasks] = useState([]);
+  const [accountingTasks, setAccountingTasks] = useState([]);
+  const [todayActions, setTodayActions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [stagedMeta, setStagedMeta] = useState({});
+  const [otherTasks, setOtherTasks] = useState([]);
+
+  const handleAutoRevisionLogic = useCallback(async (task, currentMeta) => {
+    if (!user) return;
+    const labels = task.labels || [];
+    const hasRevision = labels.some(l => l.toLowerCase().includes('for revision'));
+    const hasReview = labels.some(l => l.toLowerCase().includes('review'));
+    
+    if (hasRevision && !hasReview && currentMeta.lastTriggeredLabel !== 'for revision') {
+      const currentRound = parseInt(currentMeta.testRound || 1);
+      const historyEntry = {
+        round: currentRound,
+        startDate: currentMeta.startDate || '',
+        endDate: currentMeta.endDate || '',
+        estimate: currentMeta.estimate || '',
+        timestamp: new Date().toISOString()
+      };
+      const newHistory = [...(currentMeta.history || []), historyEntry];
+      const taskRef = doc(db, 'artifacts', appId, 'public', 'data', 'task_metadata', String(task.id));
+      await setDoc(taskRef, {
+        ...currentMeta,
+        testRound: currentRound + 1,
+        startDate: '', 
+        endDate: '',
+        estimate: '',
+        history: newHistory,
+        lastTriggeredLabel: 'for revision'
+      }, { merge: true });
+    } 
+    else if (hasReview && currentMeta.lastTriggeredLabel === 'for revision') {
+      const taskRef = doc(db, 'artifacts', appId, 'public', 'data', 'task_metadata', String(task.id));
+      await setDoc(taskRef, { lastTriggeredLabel: 'review' }, { merge: true });
+    }
+  }, [user]);
+
+  const fetchGitLabData = useCallback(async () => {
+    if (!user) return;
+    setLoading(true);
+    const projectCache = new Map();
+    const issueCache = new Map(); 
+
+    try {
+      const now = new Date();
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+      
+      const eventsUrl = `${GITLAB_BASE_URL}/users/${targetUser}/events?after=${todayStart.split('T')[0]}&per_page=100`;
+      const eventsRes = await fetch(eventsUrl, { headers: { 'PRIVATE-TOKEN': GITLAB_TOKEN } });
+      const eventsData = await eventsRes.json();
+
+      const actionList = [];
+      if (Array.isArray(eventsData)) {
+        eventsData.forEach(event => {
+          const action = event.action_name.toLowerCase();
+          const type = event.target_type;
+          const isTargetAction = ['commented', 'created', 'assigned', 'pushed', 'joined', 'accepted'].some(a => action.includes(a));
+          const isTargetObject = ['Issue', 'Note', 'MergeRequest', 'WorkItem'].includes(type) || !type;
+          if (isTargetAction || action === 'created') {
+             actionList.push({
+                id: event.id,
+                projectId: event.project_id,
+                iid: event.target_iid || event.note?.noteable_iid || 'N/A',
+                action: action,
+                title: event.target_title || event.note?.body || event.push_data?.commit_title || 'Hoạt động GitLab',
+                time: event.created_at,
+                type: type || 'Push'
+             });
+          }
+        });
+      }
+
+      const groupPromises = GROUP_IDS.map(async (groupId) => {
+        let results = [];
+        let page = 1;
+        let hasNextPage = true;
+        while (hasNextPage) {
+          const url = `${GITLAB_BASE_URL}/groups/${groupId}/issues?created_after=${CREATED_AFTER}&per_page=100&page=${page}&state=opened`;
+          const res = await fetch(url, { headers: { 'PRIVATE-TOKEN': GITLAB_TOKEN } });
+          const data = await res.json();
+          if (!Array.isArray(data) || data.length === 0) break;
+          results = [...results, ...data];
+          if (data.length < 100) hasNextPage = false;
+          else page++;
+        }
+        return results;
+      });
+
+      const fetchAccounting = async () => {
+        const baseUrl = `${GITLAB_BASE_URL}/projects/${ACCOUNTING_PROJECT_ID}/issues?per_page=100&created_after=${CREATED_AFTER}&state=opened`;
+        const urlAuthor = `${baseUrl}&author_username=${targetUser}`;
+        const urlAssignee = `${baseUrl}&assignee_username=${targetUser}`;
+        const [res1, res2] = await Promise.all([
+          fetch(urlAuthor, { headers: { 'PRIVATE-TOKEN': GITLAB_TOKEN } }),
+          fetch(urlAssignee, { headers: { 'PRIVATE-TOKEN': GITLAB_TOKEN } })
+        ]);
+        const data1 = await res1.json();
+        const data2 = await res2.json();
+        const merged = [...(Array.isArray(data1) ? data1 : []), ...(Array.isArray(data2) ? data2 : [])];
+        return Array.from(new Map(merged.map(item => [item.id, item])).values());
+      };
+
+      const [groupResults, accountingRaw] = await Promise.all([
+        Promise.all(groupPromises),
+        fetchAccounting()
+      ]);
+
+      const flattenedIssues = groupResults.flat();
+      flattenedIssues.forEach(iss => issueCache.set(`${iss.project_id}-${iss.iid}`, iss.labels));
+      
+      const candidateIssues = flattenedIssues.filter(issue => checkLabels(issue.labels));
+      
+      const finalTasks = [];
+      const batchSize = 15;
+      for (let i = 0; i < candidateIssues.length; i += batchSize) {
+        const batch = candidateIssues.slice(i, i + batchSize);
+        const enriched = await Promise.all(batch.map(async (issue) => {
+          const isAuthor = issue.author?.username === targetUser;
+          const isAssignee = issue.assignees?.some(a => a.username === targetUser);
+          let notesData = [];
+          try {
+            const nRes = await fetch(`${GITLAB_BASE_URL}/projects/${issue.project_id}/issues/${issue.iid}/notes?per_page=100`, { headers: { 'PRIVATE-TOKEN': GITLAB_TOKEN } });
+            notesData = await nRes.json();
+            const isCommenter = Array.isArray(notesData) && notesData.some(n => n.author?.username === targetUser);
+            if (isAuthor || isAssignee || isCommenter) {
+              let projectName = projectCache.get(issue.project_id);
+              if (!projectName) {
+                const pRes = await fetch(`${GITLAB_BASE_URL}/projects/${issue.project_id}`, { headers: { 'PRIVATE-TOKEN': GITLAB_TOKEN } });
+                const pData = await pRes.json();
+                projectName = pData.name || 'N/A';
+                projectCache.set(issue.project_id, projectName);
+              }
+              return { ...issue, projectName, dev: getDevFromNotes(notesData) };
+            }
+          } catch (e) {}
+          return null;
+        }));
+        finalTasks.push(...enriched.filter(t => t !== null));
+      }
+
+      const finalAccounting = [];
+      for (let i = 0; i < accountingRaw.length; i += batchSize) {
+        const batch = accountingRaw.slice(i, i + batchSize);
+        const enriched = await Promise.all(batch.map(async (issue) => {
+          issueCache.set(`${issue.project_id}-${issue.iid}`, issue.labels);
+          if (issue.labels?.some(l => l.toLowerCase() === 'done')) return null;
+          const nRes = await fetch(`${GITLAB_BASE_URL}/projects/${issue.project_id}/issues/${issue.iid}/notes?per_page=100`, { headers: { 'PRIVATE-TOKEN': GITLAB_TOKEN } });
+          const notesData = await nRes.json();
+          const extractedLinks = extractGitLabLinks(notesData);
+          if (extractedLinks.length === 0) return { ...issue, projectName: 'AccountingCorpIFRS_Idea', dev: getDevFromNotes(notesData) };
+          return null;
+        }));
+        finalAccounting.push(...enriched.filter(t => t !== null));
+      }
+
+      const enrichedActions = await Promise.all(actionList.map(async (act) => {
+          let pName = projectCache.get(act.projectId);
+          if (!pName) {
+            try {
+              const pRes = await fetch(`${GITLAB_BASE_URL}/projects/${act.projectId}`, { headers: { 'PRIVATE-TOKEN': GITLAB_TOKEN } });
+              const pData = await pRes.json();
+              pName = pData.name;
+              projectCache.set(act.projectId, pName);
+            } catch (e) { pName = 'Dự án' }
+          }
+          let labels = issueCache.get(`${act.projectId}-${act.iid}`) || [];
+          if (labels.length === 0 && act.iid !== 'N/A') {
+             try {
+                const iRes = await fetch(`${GITLAB_BASE_URL}/projects/${act.projectId}/issues/${act.iid}`, { headers: { 'PRIVATE-TOKEN': GITLAB_TOKEN } });
+                const iData = await iRes.json();
+                labels = iData.labels || [];
+                issueCache.set(`${act.projectId}-${act.iid}`, labels);
+             } catch(e) {}
+          }
+          return {
+             ...act,
+             projectName: pName,
+             labels: labels,
+             web_url: act.iid !== 'N/A' ? `https://gitlab.com/projects/${act.projectId}/-/issues/${act.iid}` : '#'
+          };
+      }));
+
+      setTasks(finalTasks);
+      setAccountingTasks(finalAccounting);
+      finalTasks.forEach(t => handleAutoRevisionLogic(t, cloudData[t.id] || {}));
+      setTodayActions(enrichedActions.sort((a, b) => new Date(b.time) - new Date(a.time)));
+    } catch (err) { console.error("Fetch error:", err); } finally { setLoading(false); }
+  }, [user, targetUser, cloudData, handleAutoRevisionLogic]);
+  
+  const fetchOtherTasks = useCallback(async () => {
+    if (!user) return;
+    try {
+      const projectCache = new Map();
+      const groupPromises = GROUP_IDS.map(async (groupId) => {
+        let results = [];
+        let page = 1;
+        let hasNextPage = true;
+        while (hasNextPage) {
+          const url = `${GITLAB_BASE_URL}/groups/${groupId}/issues?created_after=${CREATED_AFTER}&per_page=100&page=${page}&state=opened`;
+          const res = await fetch(url, { headers: { 'PRIVATE-TOKEN': GITLAB_TOKEN } });
+          const data = await res.json();
+          if (!Array.isArray(data) || data.length === 0) break;
+          results = [...results, ...data];
+          if (data.length < 100) hasNextPage = false;
+          else page++;
+        }
+        return results;
+      });
+
+      const groupResults = await Promise.all(groupPromises);
+      const allIssues = groupResults.flat();
+
+      const filtered = await Promise.all(
+        allIssues.map(async (issue) => {
+          const labels = (issue.labels || []).map(l => l.toLowerCase());
+          const hasReview = labels.some(l => l.includes('review'));
+          const hasRevision = labels.some(l => l.includes('revision'));
+          const isDone = labels.some(l => l === 'done');
+          const isAuthor = issue.author?.username === targetUser;
+
+          if (hasReview || hasRevision || isDone || !isAuthor) return null;
+
+          let projectName = projectCache.get(issue.project_id);
+          if (!projectName) {
+            try {
+              const pRes = await fetch(`${GITLAB_BASE_URL}/projects/${issue.project_id}`, { headers: { 'PRIVATE-TOKEN': GITLAB_TOKEN } });
+              const pData = await pRes.json();
+              projectName = pData.name || 'N/A';
+              projectCache.set(issue.project_id, projectName);
+            } catch (e) { projectName = 'N/A'; }
+          }
+          return { ...issue, projectName };
+        })
+      );
+      setOtherTasks(filtered.filter(t => t !== null));
+    } catch (err) { console.error("Fetch other tasks error:", err); }
+  }, [user, targetUser]);
+
+  useEffect(() => {
+    if (user) {
+      fetchGitLabData();
+      fetchOtherTasks();
+    }
+  }, [user, fetchGitLabData, fetchOtherTasks]);
+
+  const sortedTasks = useMemo(() => {
+    return [...tasks].sort((a, b) => {
+        const metaA = cloudData[a.id] || {};
+        const metaB = cloudData[b.id] || {};
+        const isReviewA = a.labels.some(l => l.toLowerCase().includes('review'));
+        const isReviewB = b.labels.some(l => l.toLowerCase().includes('review'));
+        const noStartA = !metaA.startDate || metaA.startDate === '';
+        const noStartB = !metaB.startDate || metaB.startDate === '';
+        const priorityA = (isReviewA && noStartA) ? 1 : 0;
+        const priorityB = (isReviewB && noStartB) ? 1 : 0;
+        if (priorityA !== priorityB) return priorityB - priorityA;
+        return new Date(b.created_at) - new Date(a.created_at);
+    });
+  }, [tasks, cloudData]);
+
+  const filteredStatistics = useMemo(() => {
+    const all = [...tasks, ...accountingTasks];
+    const todayStr = new Date().toLocaleDateString('en-CA'); 
+    const overdue = [];
+    const unplanned = [];
+
+    all.forEach(task => {
+      const meta = cloudData[task.id] || {};
+      const start = meta.startDate;
+      const end = meta.endDate;
+      if (!start && !end) {
+        const labels = (task.labels || []).map(l => l.toLowerCase());
+        const isRevisionTask = labels.some(l => l.includes('revision'));
+        const isTargetAssignee = task.assignees?.some(a => a.username === targetUser);
+        if (!isRevisionTask && isTargetAssignee) unplanned.push(task);
+      } else {
+        if (end && end < todayStr) overdue.push(task);
+      }
+    });
+    return { overdue, unplanned };
+  }, [tasks, accountingTasks, cloudData, targetUser]);
+
+  const updateMeta = async (taskId, field, value) => {
+    if (!user) return;
+    const taskRef = doc(db, 'artifacts', appId, 'public', 'data', 'task_metadata', String(taskId));
+    await setDoc(taskRef, { ...(cloudData[taskId] || {}), [field]: value }, { merge: true });
+  };
+
+  const handleStagedUpdate = async (taskId, field, value) => {
+    if (!user) return;
+    const currentStaged = stagedMeta[taskId] || { 
+      startDate: cloudData[taskId]?.startDate || '', 
+      endDate: cloudData[taskId]?.endDate || '', 
+      estimate: cloudData[taskId]?.estimate || '' 
+    };
+    const newStaged = { ...currentStaged, [field]: value };
+    setStagedMeta(prev => ({ ...prev, [taskId]: newStaged }));
+    if (newStaged.startDate && newStaged.endDate && newStaged.estimate) {
+      const taskRef = doc(db, 'artifacts', appId, 'public', 'data', 'task_metadata', String(taskId));
+      await setDoc(taskRef, { 
+        ...(cloudData[taskId] || {}), 
+        startDate: newStaged.startDate,
+        endDate: newStaged.endDate,
+        estimate: newStaged.estimate
+      }, { merge: true });
+      setStagedMeta(prev => { const next = { ...prev }; delete next[taskId]; return next; });
+    }
+  };
+
+  const renderTaskRow = (task, index, isAccounting = false) => {
+    const meta = cloudData[task.id] || {};
+    const history = meta.history || [];
+    const currentRound = meta.testRound || 1;
+    const overdueCr = isOverdueCreated(task.created_at);
+    const isStartLocked = !!meta.startDate && meta.startDate !== '';
+    const isEndLocked = !!meta.endDate && meta.endDate !== '';
+    const assigneeNames = task.assignees?.map(a => a.name || a.username).join(', ') || 'Chưa gán';
+    const labelsList = task.labels || [];
+    const isRevisionTask = labelsList.some(l => l.toLowerCase().includes('revision'));
+    const daysSinceUpdate = isRevisionTask ? getDaysSinceUpdate(task.updated_at) : null;
+
+    return (
+      <tr key={task.id} className={`hover:bg-slate-50 transition-colors ${overdueCr ? 'bg-rose-50/40' : ''}`}>
+        <td className="px-4 py-4 text-slate-400 font-mono text-xs text-center align-top">{index + 1}</td>
+        <td className="px-4 py-4 align-top">
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center flex-wrap gap-2">
+              <a href={task.web_url} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-blue-600 hover:underline font-bold text-xs">#{task.iid} <ExternalLink size={10} /></a>
+              <span className="text-[10px] text-slate-400 font-medium">Tạo: {formatDateVN(task.created_at)}</span>
+              {overdueCr && <span className="flex items-center gap-1 px-2 py-0.5 bg-rose-600 text-white rounded text-[9px] font-black animate-pulse uppercase"><AlertTriangle size={10} /> Task quá 5 ngày cần ưu tiên</span>}
+              {isRevisionTask && daysSinceUpdate !== null && <span className={`flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-black uppercase ${daysSinceUpdate >= 1 ? 'bg-rose-100 text-rose-700 border border-rose-200' : 'bg-slate-100 text-slate-600'}`}><CalendarDays size={10} /> Đã {daysSinceUpdate} ngày chưa phản hồi</span>}
+            </div>
+            <div className="font-semibold text-slate-800 leading-snug break-words whitespace-pre-wrap max-w-md">{task.title}</div>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 mt-1">
+               <div className="flex items-center gap-1 text-[10px] text-slate-500 font-medium bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200"><User size={10} className="text-slate-400" /> Author: <span className="text-slate-700">{task.author?.name || task.author?.username}</span></div>
+               <div className="flex items-center gap-1 text-[10px] text-slate-500 font-medium bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100"><UserPlus size={10} className="text-blue-400" /> Assignee: <span className="text-blue-700">{assigneeNames}</span></div>
+               <div className="flex flex-wrap gap-1">{(task.labels || []).map(l => (<span key={l} className="flex items-center gap-1 px-1.5 py-0.5 bg-indigo-50 text-indigo-600 border border-indigo-100 rounded text-[9px] font-bold"><Tag size={8} /> {l}</span>))}</div>
+            </div>
+            <span className="text-[10px] text-slate-400 italic">Dev: {task.dev || 'N/A'}</span>
+          </div>
+        </td>
+        {!isAccounting && (<td className="px-4 py-4 align-top"><span className="px-2 py-1 bg-indigo-50 text-indigo-700 border border-indigo-100 rounded text-[10px] font-bold w-fit">{task.projectName}</span></td>)}
+        <td className="px-4 py-4 p-0">
+          <div className="flex flex-col divide-y divide-slate-100 border rounded-lg overflow-hidden">
+            {history.map((h, i) => (
+              <div key={i} className="flex items-center gap-4 py-2.5 px-4 bg-slate-50 opacity-70">
+                <div className="w-20 shrink-0"><span className="px-2 py-1 rounded bg-slate-400 text-white font-black text-[10px] uppercase">Lần {h.round}</span></div>
+                <div className="w-28 shrink-0"><span className="text-[9px] px-2 py-0.5 rounded-full border bg-slate-200 text-slate-600 border-slate-300 uppercase font-bold tracking-tighter">Hoàn thành</span></div>
+                <div className="flex gap-4 items-center">
+                  <div className="flex flex-col"><span className="text-[8px] text-slate-400 font-bold uppercase">Bắt đầu</span><span className="text-xs text-slate-500 font-medium">{formatDateVN(h.startDate)}</span></div>
+                  <div className="flex flex-col"><span className="text-[8px] text-slate-400 font-bold uppercase">Kết thúc</span><span className="text-xs text-slate-500 font-medium">{formatDateVN(h.endDate)}</span></div>
+                  <div className="flex flex-col text-center"><span className="text-[8px] text-slate-400 font-bold uppercase">Thời gian</span><span className="text-xs text-slate-700 font-black">{h.estimate || '0'}</span></div>
+                </div>
+              </div>
+            ))}
+            <div className={`flex items-center gap-4 py-4 px-4 ${(!meta.startDate || meta.startDate === '') && (task.labels || []).some(l => l.toLowerCase().includes('review')) ? 'bg-indigo-50/30' : 'bg-white'}`}>
+              <div className="w-20 shrink-0"><span className={`px-2 py-1 rounded font-black text-[10px] shadow-sm uppercase ${currentRound > 1 ? 'bg-rose-600 text-white' : 'bg-indigo-600 text-white'}`}>Lần {currentRound}</span></div>
+              <div className="w-28 shrink-0">
+                <div className="flex flex-wrap gap-1">{(task.labels || []).filter(l => l.toLowerCase().includes('review') || l.toLowerCase().includes('revision')).map(l => (
+                    <span key={l} className={`text-[9px] px-2 py-0.5 rounded-full border font-bold uppercase tracking-tighter ${l.toLowerCase().includes('revision') ? 'bg-rose-600 text-white border-rose-700' : 'bg-indigo-100 text-indigo-700 border-indigo-300'}`}>{l}</span>
+                  ))}</div>
+              </div>
+              <div className="flex gap-4 items-center flex-1">
+                <div className="flex flex-col flex-1 max-w-[140px] relative">
+                  <span className="text-[8px] text-slate-400 font-bold uppercase mb-1 ml-1 flex items-center gap-1">Bắt đầu {isStartLocked && <Lock size={8} className="text-rose-500" />}</span>
+                  <input type="date" className={`w-full bg-white border rounded px-2 py-1.5 text-[11px] outline-none transition-all ${isStartLocked ? 'bg-slate-50 border-slate-200 text-slate-400 cursor-not-allowed' : 'border-slate-300 focus:ring-1 ring-indigo-400'}`} value={meta.startDate || ''} disabled={isStartLocked} onChange={(e) => updateMeta(task.id, 'startDate', e.target.value)} />
+                </div>
+                <div className="flex flex-col flex-1 max-w-[140px] relative">
+                  <span className="text-[8px] text-slate-400 font-bold uppercase mb-1 ml-1 flex items-center gap-1">Kết thúc {isEndLocked && <Lock size={8} className="text-rose-500" />}</span>
+                  <input type="date" className={`w-full bg-white border rounded px-2 py-1.5 text-[11px] outline-none transition-all ${isEndLocked ? 'bg-slate-50 border-slate-200 text-slate-400 cursor-not-allowed' : 'border-slate-300 focus:ring-1 ring-indigo-400'}`} value={meta.endDate || ''} disabled={isEndLocked} onChange={(e) => updateMeta(task.id, 'endDate', e.target.value)} />
+                </div>
+                <div className="flex flex-col w-24">
+                  <span className="text-[8px] text-slate-400 font-bold uppercase mb-1 text-center">Thời gian</span>
+                  <input type="text" className="w-full bg-white border border-slate-200 rounded px-2 py-1.5 text-[11px] outline-none text-center font-black focus:ring-1 ring-indigo-400" placeholder="phút" value={meta.estimate || ''} onChange={(e) => updateMeta(task.id, 'estimate', e.target.value)} />
+                </div>
+              </div>
+            </div>
+          </div>
+        </td>
+      </tr>
+    );
+  };
+
+  const MiniTable = ({ title, tasksList, icon: Icon, colorClass, isUnplanned = false }) => (
+    <div className={`bg-white rounded-xl shadow-md border overflow-hidden flex flex-col h-full ${colorClass}`}>
+      <div className={`px-4 py-3 flex items-center justify-between border-b ${colorClass.replace('border-', 'bg-').replace('200', '500')} text-white shrink-0`}>
+        <h3 className="font-bold flex items-center gap-2 text-sm uppercase"><Icon size={16} /> {title} ({tasksList.length})</h3>
+      </div>
+      <div className="overflow-y-auto flex-1 max-h-[500px]">
+        <table className="w-full text-xs text-left border-collapse table-fixed">
+          <thead className="bg-slate-50 sticky top-0 z-10 text-slate-500 font-bold uppercase text-[9px]">
+            <tr><th className="px-3 py-2 border-b w-8 text-center">#</th><th className="px-3 py-2 border-b">Task / Thông tin</th><th className={`px-3 py-2 border-b ${isUnplanned ? 'w-52' : 'w-32 text-center'}`}>{isUnplanned ? 'Thiết lập kế hoạch' : 'Hạn/Kế hoạch'}</th></tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {tasksList.length > 0 ? (tasksList.map((t, i) => {
+                const currentStaged = stagedMeta[t.id] || { startDate: cloudData[t.id]?.startDate || '', endDate: cloudData[t.id]?.endDate || '', estimate: cloudData[t.id]?.estimate || '' };
+                const isReadyToSync = currentStaged.startDate && currentStaged.endDate && currentStaged.estimate;
+                return (
+                  <tr key={t.id} className="hover:bg-slate-50">
+                    <td className="px-2 py-3 text-slate-400 text-center align-top">{i+1}</td>
+                    <td className="px-2 py-3 align-top">
+                      <div className="flex flex-col gap-1.5">
+                        <div className="flex items-center gap-2"><a href={t.web_url} target="_blank" rel="noreferrer" className="text-blue-600 font-bold hover:underline shrink-0">#{t.iid}</a><span className="text-[9px] text-slate-400 font-medium truncate">Tạo: {formatDateVN(t.created_at)}</span></div>
+                        <div className="text-slate-700 font-bold leading-relaxed break-words line-clamp-2">{t.title}</div>
+                        <div className="flex flex-wrap items-center gap-1.5 mt-0.5">{(t.labels || []).slice(0, 2).map(l => (<span key={l} className="text-[8px] bg-indigo-50 text-indigo-600 px-1 py-0.5 rounded border border-indigo-100 font-black uppercase">{l}</span>))}</div>
+                      </div>
+                    </td>
+                    <td className="px-2 py-3 align-top">
+                        {isUnplanned ? (
+                          <div className={`flex flex-col gap-2 p-1.5 rounded-lg border-2 transition-all ${isReadyToSync ? 'bg-green-50 border-green-200' : 'bg-slate-50 border-transparent'}`}>
+                            <div className="flex flex-col gap-1">
+                              <div className="flex items-center gap-1"><span className="text-[8px] text-slate-400 uppercase w-4 font-bold">Bắt:</span><input type="date" className="flex-1 bg-white border border-slate-200 rounded px-1.5 py-1 text-[10px] outline-none" value={currentStaged.startDate} onChange={(e) => handleStagedUpdate(t.id, 'startDate', e.target.value)} /></div>
+                              <div className="flex items-center gap-1"><span className="text-[8px] text-slate-400 uppercase w-4 font-bold">Hết:</span><input type="date" className="flex-1 bg-white border border-slate-200 rounded px-1.5 py-1 text-[10px] outline-none" value={currentStaged.endDate} onChange={(e) => handleStagedUpdate(t.id, 'endDate', e.target.value)} /></div>
+                            </div>
+                            <div className="flex items-center gap-1"><input type="text" placeholder="phút" className="flex-1 bg-white border border-slate-200 rounded px-1.5 py-1 text-[10px] font-black outline-none text-center" value={currentStaged.estimate} onChange={(e) => handleStagedUpdate(t.id, 'estimate', e.target.value)} />{isReadyToSync ? <div className="text-green-600 animate-bounce cursor-pointer" onClick={() => handleStagedUpdate(t.id, 'trigger', 'now')}><Send size={14} /></div> : <div className="text-slate-300"><CheckCircle2 size={14} /></div>}</div>
+                          </div>
+                        ) : (<div className="text-center flex flex-col gap-1"><span className={`px-2 py-0.5 rounded font-black text-[10px] ${cloudData[t.id]?.endDate < new Date().toLocaleDateString('en-CA') ? 'bg-rose-100 text-rose-700' : 'bg-slate-100 text-slate-600'}`}>{formatDateVN(cloudData[t.id]?.endDate)}</span></div>)}
+                      </td>
+                  </tr>
+                );
+              })) : (<tr><td colSpan="3" className="px-4 py-8 text-center text-slate-400 italic font-medium">Không có dữ liệu</td></tr>)}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen bg-[#f1f5f9] p-4 lg:p-6 font-sans text-slate-900">
+      <div className="max-w-[1600px] mx-auto mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+        <div className="flex items-center gap-4">
+          <button onClick={onBack} className="p-2 hover:bg-slate-100 rounded-lg text-slate-500 transition-colors">
+             <ChevronLeft size={24} />
+          </button>
+          <div className="p-3 bg-indigo-600 rounded-xl shadow-lg shadow-indigo-100 text-white"><Zap size={24} /></div>
+          <div>
+            <div className="flex items-center gap-2">
+               <h1 className="text-2xl font-bold text-slate-800 tracking-tight">GitLab Task: {targetUser}</h1>
+            </div>
+            <p className="text-slate-500 text-sm italic">Hệ thống theo dõi Review • Revision & Hoạt động thời gian thực</p>
+          </div>
+        </div>
+        <button onClick={fetchGitLabData} disabled={loading} className="flex items-center gap-2 bg-slate-800 text-white px-5 py-2.5 rounded-xl hover:bg-slate-900 transition-all font-medium disabled:opacity-50">
+          <RefreshCw size={18} className={loading ? 'animate-spin' : ''} /> {loading ? 'Đang cập nhật...' : 'Đồng bộ GitLab'}
+        </button>
+      </div>
+
+      <div className="max-w-[1600px] mx-auto space-y-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <div className="bg-white p-5 rounded-xl border border-slate-200 border-l-4 border-l-blue-500 flex items-center gap-4 shadow-sm">
+            <div className="p-3 bg-blue-50 text-blue-600 rounded-full"><UserCheck size={24} /></div>
+            <div><p className="text-xs text-slate-500 font-bold uppercase tracking-wider">Tổng Task</p><p className="text-2xl font-black text-blue-700">{tasks.length + accountingTasks.length}</p></div>
+          </div>
+          <div className="bg-white p-5 rounded-xl border border-slate-200 border-l-4 border-l-emerald-500 flex items-center gap-4 shadow-sm">
+            <div className="p-3 bg-emerald-50 text-emerald-600 rounded-full"><Activity size={24} /></div>
+            <div><p className="text-xs text-slate-500 font-bold uppercase tracking-wider">Tương tác hôm nay</p><p className="text-2xl font-black text-emerald-700">{todayActions.length}</p></div>
+          </div>
+          <div className="bg-white p-5 rounded-xl border border-slate-200 border-l-4 border-l-indigo-500 flex items-center gap-4 shadow-sm">
+            <div className="p-3 bg-indigo-50 text-indigo-600 rounded-full"><ShieldCheck size={24} /></div>
+            <div><p className="text-xs text-slate-500 font-bold uppercase tracking-wider">Review</p><p className="text-2xl font-black text-indigo-700">{tasks.filter(t => t.labels.some(l => l.toLowerCase().includes('review'))).length}</p></div>
+          </div>
+          <div className="bg-white p-5 rounded-xl border border-slate-200 border-l-4 border-l-rose-500 flex items-center gap-4 shadow-sm">
+            <div className="p-3 bg-rose-50 text-rose-600 rounded-full"><Wrench size={24} /></div>
+            <div><p className="text-xs text-slate-500 font-bold uppercase tracking-wider">Revision</p><p className="text-2xl font-black text-rose-700">{tasks.filter(t => t.labels.some(l => l.toLowerCase().includes('revision'))).length}</p></div>
+          </div>
+        </div>
+        
+        <WorkloadChart tasks={[...tasks, ...accountingTasks]} cloudData={cloudData} />
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
+          <ActivityMiniTable actions={todayActions} />
+          <MiniTable title="Task trễ hạn kế hoạch" tasksList={filteredStatistics.overdue} icon={History} colorClass="border-rose-200" />
+          <MiniTable title="Task chưa lập kế hoạch" tasksList={filteredStatistics.unplanned} icon={ClipboardList} colorClass="border-slate-300" isUnplanned={true} />
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-xl border border-rose-200 overflow-hidden">
+          <div className="bg-rose-700 text-white px-6 py-4 flex items-center justify-between">
+            <h2 className="font-bold flex items-center gap-2 text-lg uppercase tracking-tight"><Layout size={20} /> Task Khách hàng Cần Xử Lý</h2>
+            <span className="text-[10px] bg-white/20 px-3 py-1 rounded-full font-bold">Dự án: AccountingCorpIFRS_Idea</span>
+          </div>
+          <div className="overflow-x-auto custom-scrollbar">
+            <table className="w-full text-sm text-left border-collapse">
+              <thead className="bg-rose-50 text-rose-800 uppercase text-[10px] font-bold">
+                <tr><th className="px-4 py-4 border-b w-12 text-center">STT</th><th className="px-4 py-4 border-b">Task / Title / Tags</th><th className="px-4 py-4 border-b min-w-[650px]">Tiến độ Test</th></tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {accountingTasks.length > 0 ? accountingTasks.map((t, index) => renderTaskRow(t, index, true)) : <tr><td colSpan="3" className="px-6 py-10 text-center text-slate-400 italic">Tuyệt vời! Bạn đã hoàn thành tất cả.</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
+          <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between">
+            <h2 className="font-bold flex items-center gap-2 text-lg"><Database size={20} className="text-indigo-400" /> Danh sách task Review/Revision</h2>
+          </div>
+          <div className="overflow-x-auto custom-scrollbar">
+            <table className="w-full text-sm text-left border-collapse">
+              <thead className="bg-slate-50 text-slate-600 uppercase text-[10px] font-bold">
+                <tr><th className="px-4 py-4 border-b w-12 text-center">STT</th><th className="px-4 py-4 border-b min-w-[350px]">Task / Title / Tags</th><th className="px-4 py-4 border-b w-40">Dự án</th><th className="px-4 py-4 border-b min-w-[650px]">Tiến độ Test</th></tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {sortedTasks.length > 0 ? sortedTasks.map((t, index) => renderTaskRow(t, index)) : <tr><td colSpan="4" className="px-6 py-10 text-center text-slate-400 italic">Tuyệt vời! Bạn đã hoàn thành tất cả.</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-xl border border-indigo-200 overflow-hidden">
+          <div className="bg-indigo-700 text-white px-6 py-4 flex items-center justify-between">
+            <h2 className="font-bold flex items-center gap-2 text-lg">
+              <Database size={20} className="text-white" /> 
+              Danh sách task dev chưa xử lý
+            </h2>
+          </div>
+          <div className="overflow-x-auto custom-scrollbar">
+            <table className="w-full text-sm text-left border-collapse">
+              <thead className="bg-slate-50 text-slate-600 uppercase text-[10px] font-bold">
+                <tr>
+                  <th className="px-4 py-4 border-b w-12 text-center">STT</th>
+                  <th className="px-4 py-4 border-b min-w-[350px]">Task / Title / Tags</th>
+                  <th className="px-4 py-4 border-b w-40">Dự án</th>
+                  <th className="px-4 py-4 border-b min-w-[650px]">Tiến độ Test</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {otherTasks.length > 0 
+                  ? otherTasks.map((t, index) => renderTaskRow(t, index)) 
+                  : (
+                    <tr>
+                      <td colSpan="4" className="px-6 py-10 text-center text-slate-400 italic">
+                        Không có task phù hợp
+                      </td>
+                    </tr>
+                  )
+                }
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// --- Portal View ---
+const Portal = ({ onSelectUser }) => (
+  <div className="max-w-4xl mx-auto py-20 px-6 animate-in zoom-in duration-300">
+    <div className="text-center mb-12">
+      <div className="inline-block p-4 bg-indigo-600 text-white rounded-3xl shadow-xl shadow-indigo-200 mb-6"><Zap size={40} /></div>
+      <h1 className="text-4xl font-black text-slate-900 tracking-tight mb-4">Hệ thống Quản lý Task GitLab</h1>
+      <p className="text-slate-500 text-lg font-medium">Vui lòng chọn nhân sự để truy cập bảng điều khiển</p>
+    </div>
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+      {[
+        { id: 'phuonghtm1', name: 'Phuong Htm 1', desc: 'Quản lý task, Review & Revision' },
+        { id: 'trangttt', name: 'Trang Ttt', desc: 'Quản lý task, Review & Revision' },
+        { id: 'huongntt', name: 'Huong Ttt', desc: 'Quản lý task, Review & Revision' },
+        { id: 'phuongntb', name: 'Phuong ntb', desc: 'Quản lý task, Review & Revision' }
+      ].map(u => (
+        <button key={u.id} onClick={() => onSelectUser(u.id)} className="group bg-white p-8 rounded-3xl border-2 border-slate-200 hover:border-indigo-500 hover:shadow-2xl hover:shadow-indigo-100 transition-all text-left">
+          <div className="w-14 h-14 bg-indigo-100 text-indigo-600 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform"><User size={28} /></div>
+          <h3 className="text-2xl font-black text-slate-800 mb-2">{u.name}</h3>
+          <p className="text-slate-500 text-sm mb-6">{u.desc}</p>
+          <div className="flex items-center gap-2 text-indigo-600 font-bold">Truy cập ngay <ArrowRight size={18} /></div>
+        </button>
+      ))}
+    </div>
+  </div>
+);
+
+// --- Root App ---
+export default function App() {
+  const [view, setView] = useState('portal'); // 'portal', 'phuonghtm1', 'trangttt'
+  const [user, setUser] = useState(null);
+  const [cloudData, setCloudData] = useState({});
+
+  useEffect(() => {
+    const initAuth = async () => {
+      if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+        await signInWithCustomToken(auth, __initial_auth_token);
+      } else {
+        await signInAnonymously(auth);
+      }
+    };
+    initAuth();
+    const unsub = onAuthStateChanged(auth, setUser);
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    const q = collection(db, 'artifacts', appId, 'public', 'data', 'task_metadata');
+    const unsub = onSnapshot(q, (snapshot) => {
+      const data = {};
+      snapshot.forEach(doc => { data[doc.id] = doc.data(); });
+      setCloudData(data);
+    });
+    return () => unsub();
+  }, [user]);
+
+  return (
+    <div className="min-h-screen bg-[#f8fafc] font-sans">
+      <style>{`
+        .custom-scrollbar::-webkit-scrollbar { width: 5px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
+      `}</style>
+      {view === 'portal' ? (
+        <Portal onSelectUser={setView} />
+      ) : (
+        <GitLabTaskManager 
+          targetUser={view} 
+          user={user} 
+          cloudData={cloudData} 
+          onBack={() => setView('portal')} 
+        />
+      )}
+    </div>
+  );
+}

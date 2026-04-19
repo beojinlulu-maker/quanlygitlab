@@ -1,0 +1,1103 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>1C Portal - Chọn Member</title>
+    <!-- Google Fonts -->
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@500;600;700&display=swap"
+        rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg-color: #f8fafc;
+            --card-bg: #ffffff;
+            --text-main: #1e293b;
+            --text-muted: #64748b;
+            --primary: #4f46e5;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-color);
+            font-family: 'Inter', sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+        }
+
+        .portal-container {
+            width: 100%;
+            max-width: 1000px;
+            padding: 40px 20px;
+        }
+
+        .portal-header {
+            text-align: center;
+            margin-bottom: 50px;
+        }
+
+        .portal-header h1 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 36px;
+            color: var(--text-main);
+            margin: 0 0 10px 0;
+        }
+
+        .portal-header p {
+            font-size: 16px;
+            color: var(--text-muted);
+            margin: 0;
+        }
+
+        .member-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 24px;
+        }
+
+        .member-card {
+            background: var(--card-bg);
+            border-radius: 16px;
+            padding: 30px 20px;
+            text-align: center;
+            text-decoration: none;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+            border: 1px solid #e2e8f0;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .member-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 4px;
+            background: var(--primary);
+            transform: scaleX(0);
+            transform-origin: center;
+            transition: transform 0.3s ease;
+        }
+
+        .member-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            border-color: #c7d2fe;
+        }
+
+        .member-card:hover::before {
+            transform: scaleX(1);
+        }
+
+        .avatar-circle {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: #e0e7ff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 20px;
+            color: var(--primary);
+        }
+
+        .avatar-circle i {
+            width: 36px;
+            height: 36px;
+        }
+
+        .member-name {
+            font-family: 'Outfit', sans-serif;
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--text-main);
+            margin: 0 0 8px 0;
+        }
+
+        .member-username {
+            font-size: 14px;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        .go-btn {
+            margin-top: 24px;
+            background: transparent;
+            color: var(--primary);
+            border: 1px solid var(--primary);
+            padding: 8px 24px;
+            border-radius: 100px;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        .member-card:hover .go-btn {
+            background: var(--primary);
+            color: white;
+        }
+
+        .stat-card-portal {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid #e2e8f0;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .stat-card-portal:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+            border-color: #cbd5e1;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="portal-container">
+        <div class="portal-header">
+            <h1 style="display:flex; align-items:center; justify-content:center; gap: 12px;">
+                <i data-lucide="layout-dashboard" style="width: 32px; height: 32px; color: #4f46e5;"></i>
+                Quản lý task Gitlab
+            </h1>
+            <p>Chọn thành viên để xem công việc chi tiết trên GitLab</p>
+        </div>
+
+        <div class="team-stats-row"
+            style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 40px;">
+            <div class="stat-card-portal" onclick="showPortalTasks('customer')">
+                <div
+                    style="background: #e0e7ff; color: #4f46e5; width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center;">
+                    <i data-lucide="layers"></i>
+                </div>
+                <div>
+                    <div style="font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase;">TASK
+                        KHÁCH HÀNG</div>
+                    <div id="stat-customer"
+                        style="font-size: 24px; font-weight: 800; font-family: 'Outfit', sans-serif; color: #1e293b;">--
+                    </div>
+                </div>
+            </div>
+
+            <div class="stat-card-portal" onclick="showPortalTasks('review')">
+                <div
+                    style="background: #f3e8ff; color: #9333ea; width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center;">
+                    <i data-lucide="eye"></i>
+                </div>
+                <div>
+                    <div style="font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase;">TASK
+                        REVIEW
+                    </div>
+                    <div id="stat-review"
+                        style="font-size: 24px; font-weight: 800; font-family: 'Outfit', sans-serif; color: #1e293b;">--
+                    </div>
+                </div>
+            </div>
+
+            <div class="stat-card-portal" onclick="showPortalTasks('revision')">
+                <div
+                    style="background: #fce7f3; color: #db2777; width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center;">
+                    <i data-lucide="shield-alert"></i>
+                </div>
+                <div>
+                    <div style="font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase;">TASK
+                        REVISION
+                    </div>
+                    <div id="stat-revision"
+                        style="font-size: 24px; font-weight: 800; font-family: 'Outfit', sans-serif; color: #1e293b;">--
+                    </div>
+                </div>
+            </div>
+
+            <div class="stat-card-portal" onclick="showPortalTasks('unplanned')">
+                <div
+                    style="background: #fef3c7; color: #d97706; width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center;">
+                    <i data-lucide="calendar-off"></i>
+                </div>
+                <div>
+                    <div style="font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase;">CHƯA LẬP
+                        KẾ HOẠCH</div>
+                    <div id="stat-unplanned"
+                        style="font-size: 24px; font-weight: 800; font-family: 'Outfit', sans-serif; color: #1e293b;">--
+                    </div>
+                </div>
+            </div>
+
+            <div class="stat-card-portal" onclick="showPortalTasks('overdue')">
+                <div
+                    style="background: #fee2e2; color: #dc2626; width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center;">
+                    <i data-lucide="clock-4"></i>
+                </div>
+                <div>
+                    <div style="font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase;">TRỄ HẠN
+                        KẾ HOẠCH</div>
+                    <div id="stat-overdue"
+                        style="font-size: 24px; font-weight: 800; font-family: 'Outfit', sans-serif; color: #1e293b;">--
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Biểu đồ tổng quan các loại task của thành viên -->
+        <div
+            style="margin-bottom: 40px; background:white; border-radius:16px; padding:24px; border:1px solid #e2e8f0; box-shadow:0 4px 6px -1px rgba(0,0,0,0.05);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
+                <h2
+                    style="margin:0; font-family:'Outfit'; font-size:18px; color:#1e293b; display:flex; align-items:center; gap:8px;">
+                    <i data-lucide="bar-chart-2" style="color:#1e293b; width:20px; height:20px;"></i>
+                    Thống kê số lượng task theo thành viên
+                </h2>
+            </div>
+            <div style="height: 350px;">
+                <canvas id="memberTasksChart"></canvas>
+            </div>
+        </div>
+        <!-- Bảng danh sách task (hiển thị khi click vào chỉ số) -->
+        <div id="portal-task-container"
+            style="display:none; margin-bottom: 40px; background:white; border-radius:16px; border:1px solid #e2e8f0; box-shadow:0 4px 6px -1px rgba(0,0,0,0.05); overflow:hidden;">
+            <div
+                style="padding:20px 24px; border-bottom:1px solid #e2e8f0; display:flex; justify-content:space-between; align-items:center; background:#f8fafc;">
+                <h2 id="table-title" style="margin:0; font-family:'Outfit'; font-size:18px; color:#1e293b;">...</h2>
+                <button onclick="closePortalTable()"
+                    style="background:none; border:none; cursor:pointer; color:#64748b; padding:4px; display:flex; align-items:center; justify-content:center; border-radius:8px; transition:background 0.2s;"
+                    onmouseover="this.style.background='#e2e8f0'" onmouseout="this.style.background='transparent'"><i
+                        data-lucide="x"></i></button>
+            </div>
+            <div style="overflow-x:auto; max-height:400px; overflow-y:auto;">
+                <table style="width:100%; border-collapse:collapse; font-size:14px; text-align:left;">
+                    <thead style="position: sticky; top: 0; background: #f8fafc; z-index: 10;">
+                        <tr>
+                            <th
+                                style="padding:16px 24px; color:#64748b; font-weight:600; border-bottom:1px solid #e2e8f0;">
+                                ID</th>
+                            <th
+                                style="padding:16px 24px; color:#64748b; font-weight:600; border-bottom:1px solid #e2e8f0;">
+                                PROJECT</th>
+                            <th
+                                style="padding:16px 24px; color:#64748b; font-weight:600; border-bottom:1px solid #e2e8f0;">
+                                TASK TITLE</th>
+                            <th
+                                style="padding:16px 24px; color:#64748b; font-weight:600; border-bottom:1px solid #e2e8f0; white-space:nowrap;">
+                                NGƯỜI TẠO</th>
+                            <th
+                                style="padding:16px 24px; color:#64748b; font-weight:600; border-bottom:1px solid #e2e8f0; white-space:nowrap;">
+                                NGƯỜI GẮN</th>
+                            <th
+                                style="padding:16px 24px; color:#64748b; font-weight:600; border-bottom:1px solid #e2e8f0; white-space:nowrap;">
+                                NGÀY TẠO</th>
+                        </tr>
+                    </thead>
+                    <tbody id="table-body">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <!-- Biểu đồ kế hoạch công việc custom -->
+        <div
+            style="margin-bottom: 40px; background:white; border-radius:16px; padding:24px; border:1px solid #e2e8f0; box-shadow:0 4px 6px -1px rgba(0,0,0,0.05);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
+                <div>
+                    <h2
+                        style="margin:0 0 4px 0; font-family:'Outfit'; font-size:18px; color:#1e293b; display:flex; align-items:center; gap:8px;">
+                        <i data-lucide="bar-chart-2" style="color:#1e293b; width:20px; height:20px;"></i>
+                        Thống kê khối lượng công việc theo các thành viên
+                    </h2>
+                    <p style="margin:0; font-size:13px; color:#64748b;">Tích chọn ngày để xem danh sách task</p>
+                </div>
+                <div
+                    style="display:flex; align-items:center; border:1px solid #e2e8f0; border-radius:8px; padding:4px; font-size:14px; color:#1e293b; font-weight:600;">
+                    <button onclick="changePortalWeek(-1)"
+                        style="background:none; border:none; cursor:pointer; padding:4px 8px; border-radius:4px; display:flex; align-items:center; color:#64748b;"><i
+                            data-lucide="chevron-left" style="width:16px; height:16px;"></i></button>
+                    <span id="portal-week-range" style="margin:0 12px; font-family:'Inter'; font-size:13px;">--/--/----
+                        - --/--/----</span>
+                    <button onclick="changePortalWeek(1)"
+                        style="background:none; border:none; cursor:pointer; padding:4px 8px; border-radius:4px; display:flex; align-items:center; color:#64748b;"><i
+                            data-lucide="chevron-right" style="width:16px; height:16px;"></i></button>
+                </div>
+            </div>
+
+            <!-- Legend -->
+            <div style="display:flex; gap:16px; margin-bottom:16px; font-size:12px; color:#64748b; font-weight:500;">
+                <div style="display:flex; align-items:center; gap:6px;">
+                    <div style="width:12px; height:12px; border-radius:2px; background:#4f46e5;"></div>Hường
+                </div>
+                <div style="display:flex; align-items:center; gap:6px;">
+                    <div style="width:12px; height:12px; border-radius:2px; background:#db2777;"></div>Trang
+                </div>
+                <div style="display:flex; align-items:center; gap:6px;">
+                    <div style="width:12px; height:12px; border-radius:2px; background:#059669;"></div>Phương H.
+                </div>
+                <div style="display:flex; align-items:center; gap:6px;">
+                    <div style="width:12px; height:12px; border-radius:2px; background:#d97706;"></div>Phương N.
+                </div>
+            </div>
+
+            <div style="display:flex; gap:32px; align-items:stretch;">
+                <!-- Left: Chart area -->
+                <div style="flex:0 0 45%; display:flex; flex-direction:column;">
+                    <div id="custom-chart-container"
+                        style="display:flex; justify-content:space-between; align-items:flex-end; gap:8px; height:180px; padding-bottom:8px; border-bottom:1px solid #e2e8f0; border-top:1px dashed #f1f5f9; padding-top:16px;">
+                        <!-- Columns generated by JS -->
+                    </div>
+                    <div
+                        style="display:flex; justify-content:space-between; margin-top:12px; font-size:11px; color:#64748b;">
+                        <span>Hạn mức: 8h/ngày (Mỗi người)</span>
+                        <span style="color:#4f46e5; font-weight:600;">Chọn: <span
+                                id="chart-selected-sum">0.0h</span></span>
+                    </div>
+                </div>
+
+                <!-- Right: Task list area -->
+                <div
+                    style="flex:1; border-left:1px dashed #e2e8f0; padding-left:32px; display:flex; flex-direction:column; overflow:hidden;">
+                    <div style="display:flex; align-items:center; gap:8px; margin-bottom:16px;">
+                        <i data-lucide="calendar" style="color:#1e293b; width:20px; height:20px;"></i>
+                        <h3
+                            style="margin:0; font-family:'Outfit'; font-size:15px; color:#1e293b; text-transform:uppercase;">
+                            Task ngày <span id="portal-selected-date-title"></span></h3>
+                        <span id="portal-selected-date-count"
+                            style="background:#e0e7ff; color:#4f46e5; padding:2px 8px; border-radius:100px; font-size:11px; font-weight:700;">0
+                            task</span>
+                    </div>
+
+                    <div id="portal-selected-date-tasks"
+                        style="flex:1; overflow-y:auto; max-height:220px; display:flex; flex-direction:column; gap:8px; padding-right:8px;">
+                        <!-- JS generated list -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+
+
+        <div class="member-grid">
+            <a href="dashboard.html?user=huongntt" class="member-card">
+                <div class="avatar-circle"><i data-lucide="user"></i></div>
+                <h3 class="member-name">Thúy Hường</h3>
+                <span class="member-username">@huongntt</span>
+                <div class="go-btn" style="border-color:#4f46e5;">View Dashboard</div>
+                <style>
+                    .member-card:nth-child(1):hover .go-btn {
+                        background: #4f46e5;
+                        color: white;
+                    }
+                </style>
+            </a>
+
+            <a href="dashboard.html?user=trangttt" class="member-card">
+                <div class="avatar-circle" style="background:#fce7f3; color:#db2777;"><i data-lucide="user"></i></div>
+                <h3 class="member-name">Thu Trang</h3>
+                <span class="member-username">@trangttt</span>
+                <div class="go-btn" style="color:#db2777; border-color:#db2777;">View Dashboard</div>
+                <style>
+                    .member-card:nth-child(2):hover .go-btn {
+                        background: #db2777;
+                        color: white;
+                    }
+                </style>
+                <style>
+                    .member-card:nth-child(2)::before {
+                        background: #db2777;
+                    }
+                </style>
+            </a>
+
+            <a href="dashboard.html?user=phuonghtm1" class="member-card">
+                <div class="avatar-circle" style="background:#dcfce7; color:#059669;"><i data-lucide="user"></i></div>
+                <h3 class="member-name">Hà Phương</h3>
+                <span class="member-username">@phuonghtm1</span>
+                <div class="go-btn" style="color:#059669; border-color:#059669;">View Dashboard</div>
+                <style>
+                    .member-card:nth-child(3):hover .go-btn {
+                        background: #059669;
+                        color: white;
+                    }
+                </style>
+                <style>
+                    .member-card:nth-child(3)::before {
+                        background: #059669;
+                    }
+                </style>
+            </a>
+
+            <a href="dashboard.html?user=phuongntb" class="member-card">
+                <div class="avatar-circle" style="background:#fef3c7; color:#d97706;"><i data-lucide="user"></i></div>
+                <h3 class="member-name">Bích Phương</h3>
+                <span class="member-username">@phuongntb</span>
+                <div class="go-btn" style="color:#d97706; border-color:#d97706;">View Dashboard</div>
+                <style>
+                    .member-card:nth-child(4):hover .go-btn {
+                        background: #d97706;
+                        color: white;
+                    }
+                </style>
+                <style>
+                    .member-card:nth-child(4)::before {
+                        background: #d97706;
+                    }
+                </style>
+            </a>
+        </div>
+    </div>
+
+    <script>
+        lucide.createIcons();
+
+        // Team Portal Analytics Logic
+        async function loadTeamStats() {
+            let GITLAB_TOKEN = localStorage.getItem('gitlab_token_saved') || '';
+            if (!GITLAB_TOKEN || !GITLAB_TOKEN.startsWith('glpat-')) {
+                const pass = prompt("Yêu cầu xác thực. Vui lòng nhập mật khẩu dự án:");
+                if (pass) {
+                    const hex = "0005040d154f192c3b2a5403432f19250416242f111c15410a123d364b5d2a38045d2e0832172923321e371b4f52454f4259570c0d09570b0d";
+                    let str = "";
+                    for(let i=0; i<hex.length; i+=2) {
+                        str += String.fromCharCode(parseInt(hex.substr(i, 2), 16) ^ pass.charCodeAt((i/2) % pass.length));
+                    }
+                    if (str.startsWith('glpat-')) {
+                        GITLAB_TOKEN = str;
+                        localStorage.setItem('gitlab_token_saved', str);
+                    } else {
+                        alert("Mật khẩu sai. Dữ liệu sẽ không được tải!");
+                    }
+                }
+            }
+            const GITLAB_BASE_URL = 'https://gitlab.com/api/v4';
+            const GROUP_IDS = ['4922129', '3590912', '58863801'];
+            const CUSTOMER_PROJECT_ID = '44977878';
+            const CREATED_AFTER = '2025-01-01T00:00:00Z';
+            const TEAM_USERS = ['huongntt', 'trangttt', 'phuonghtm1', 'phuongntb'];
+
+            let allIssues = [];
+
+            // 1. Fetch Group Issues
+            for (const groupId of GROUP_IDS) {
+                let page = 1;
+                while (true) {
+                    const url = `${GITLAB_BASE_URL}/groups/${groupId}/issues?created_after=${CREATED_AFTER}&per_page=100&page=${page}&state=opened`;
+                    try {
+                        const res = await fetch(url, { headers: { 'PRIVATE-TOKEN': GITLAB_TOKEN } });
+                        if (!res.ok) break;
+                        const data = await res.json();
+                        if (data.length === 0) break;
+                        allIssues = allIssues.concat(data);
+                        page++;
+                    } catch (e) { break; }
+                }
+            }
+
+            // 2. Fetch Customer Issues
+            let page = 1;
+            while (true) {
+                const url = `${GITLAB_BASE_URL}/projects/${CUSTOMER_PROJECT_ID}/issues?created_after=${CREATED_AFTER}&per_page=100&page=${page}&state=opened`;
+                try {
+                    const res = await fetch(url, { headers: { 'PRIVATE-TOKEN': GITLAB_TOKEN } });
+                    if (!res.ok) break;
+                    const data = await res.json();
+                    if (data.length === 0) break;
+                    allIssues = allIssues.concat(data);
+                    page++;
+                } catch (e) { break; }
+            }
+
+            // Remove duplicates
+            const uniqueIssues = [];
+            const seenIds = new Set();
+            for (const issue of allIssues) {
+                if (!seenIds.has(issue.id)) {
+                    seenIds.add(issue.id);
+                    uniqueIssues.push(issue);
+                }
+            }
+
+            // Sync with dashboard: Fetch notes for customer tasks to check if linked to a dev task (contains gitlab.com)
+            // AND fetch notes for review/revision tasks to see who is a commenter
+            const enrichedIssues = await Promise.all(uniqueIssues.map(async (issue) => {
+                const isCustomerProj = String(issue.project_id) === CUSTOMER_PROJECT_ID;
+                const labels = (issue.labels || []).map(l => l.toLowerCase());
+                const isReviewOrRevision = !isCustomerProj && labels.some(l => l.includes('review') || l.includes('revision'));
+
+                if (!isCustomerProj && !isReviewOrRevision) return issue;
+
+                let notesData = [];
+                try {
+                    const notesRes = await fetch(`${GITLAB_BASE_URL}/projects/${issue.project_id}/issues/${issue.iid}/notes?per_page=100`, { headers: { 'PRIVATE-TOKEN': GITLAB_TOKEN } });
+                    if (notesRes.ok) {
+                        notesData = await notesRes.json();
+                    }
+                } catch (e) { }
+
+                if (isCustomerProj) {
+                    const hasGitlabLink = notesData.some(n => {
+                        const bodyStr = (n.body || '').toLowerCase();
+                        return bodyStr.includes('gitlab.com');
+                    });
+                    if (hasGitlabLink) return null;
+                }
+
+                issue.custom_notes_cache = notesData;
+                return issue;
+            }));
+
+            const finalIssues = enrichedIssues.filter(i => i !== null);
+
+            // Precise filter mirroring the individual dashboards
+            const teamTotalTasks = [];
+            window.portalTaskData = { customer: [], review: [], revision: [], unplanned: [], overdue: [] };
+            let customerCount = 0;
+            let reviewCount = 0;
+            let revisionCount = 0;
+
+            const memberStats = {
+                huongntt: { customer: 0, review: 0, revision: 0, dev: 0, customerTasks: [], reviewTasks: [], revisionTasks: [], devTasks: [], name: 'Hường' },
+                trangttt: { customer: 0, review: 0, revision: 0, dev: 0, customerTasks: [], reviewTasks: [], revisionTasks: [], devTasks: [], name: 'Trang' },
+                phuonghtm1: { customer: 0, review: 0, revision: 0, dev: 0, customerTasks: [], reviewTasks: [], revisionTasks: [], devTasks: [], name: 'Phương H.' },
+                phuongntb: { customer: 0, review: 0, revision: 0, dev: 0, customerTasks: [], reviewTasks: [], revisionTasks: [], devTasks: [], name: 'Phương N.' }
+            };
+
+            finalIssues.forEach(issue => {
+                const labels = (issue.labels || []).map(l => l.toLowerCase());
+                if (labels.some(l => l.includes('done'))) return;
+
+                const isCustomerProj = String(issue.project_id) === CUSTOMER_PROJECT_ID;
+
+                let isTeamCustomerTask = false;
+                let isTeamDevTask = false;
+                let isTeamReviewTask = false;
+                let isTeamRevisionTask = false;
+
+                TEAM_USERS.forEach(user => {
+                    const isAssignee = issue.assignees?.some(a => a.username === user);
+                    const isAuthor = issue.author?.username === user;
+                    const isCommenter = (issue.custom_notes_cache || []).some(n => n.author?.username === user);
+
+                    let memberHasCustomer = false;
+                    let memberHasDev = false;
+                    let memberHasReview = false;
+                    let memberHasRevision = false;
+
+                    if (isCustomerProj && (isAssignee || isAuthor)) {
+                        memberHasCustomer = true;
+                        isTeamCustomerTask = true;
+                    }
+                    if (!isCustomerProj && isAuthor && !labels.some(l => l.includes('review') || l.includes('revision'))) {
+                        memberHasDev = true;
+                        isTeamDevTask = true;
+                    }
+                    if (!isCustomerProj && labels.some(l => l.includes('review'))) {
+                        if (isAssignee) memberHasReview = true;
+                        if (isAssignee || isAuthor || isCommenter) isTeamReviewTask = true;
+                    }
+                    if (!isCustomerProj && (isAssignee || isAuthor || isCommenter) && labels.some(l => l.includes('revision'))) {
+                        memberHasRevision = true;
+                        isTeamRevisionTask = true;
+                    }
+
+                    if (memberHasCustomer) { memberStats[user].customer++; memberStats[user].customerTasks.push(issue); }
+                    if (memberHasDev) { memberStats[user].dev++; memberStats[user].devTasks.push(issue); }
+                    if (memberHasReview) { memberStats[user].review++; memberStats[user].reviewTasks.push(issue); }
+                    if (memberHasRevision) { memberStats[user].revision++; memberStats[user].revisionTasks.push(issue); }
+                });
+
+                if (isTeamCustomerTask || isTeamDevTask || isTeamReviewTask || isTeamRevisionTask) {
+                    teamTotalTasks.push(issue);
+                    if (isTeamCustomerTask) {
+                        customerCount++;
+                        window.portalTaskData.customer.push(issue);
+                    }
+                    if (isTeamReviewTask) {
+                        reviewCount++;
+                        window.portalTaskData.review.push(issue);
+                    }
+                    if (isTeamRevisionTask) {
+                        revisionCount++;
+                        window.portalTaskData.revision.push(issue);
+                    }
+                }
+            });
+
+            let unplannedCount = 0;
+            let overdueCount = 0;
+
+            const todayZero = new Date();
+            todayZero.setHours(0, 0, 0, 0);
+
+            teamTotalTasks.forEach(task => {
+                let meta = {};
+                try {
+                    const data = localStorage.getItem('taskMeta_' + task.id);
+                    if (data) meta = JSON.parse(data);
+                } catch (e) { }
+
+                const labels = (task.labels || []).map(l => l.toLowerCase());
+                const isRevision = labels.some(l => l.includes('revision'));
+
+                // Unplanned logic
+                const hasAnyPlan = meta.startDate || meta.endDate;
+                const isAssigneeForAnyMember = TEAM_USERS.some(user => task.assignees?.some(a => a.username === user));
+
+                if (!isRevision && !hasAnyPlan && isAssigneeForAnyMember) {
+                    unplannedCount++;
+                    window.portalTaskData.unplanned.push(task);
+                }
+
+                // Overdue logic
+                if (!isRevision && (meta.startDate || meta.endDate)) {
+                    if (meta.endDate) {
+                        const end = new Date(meta.endDate);
+                        end.setHours(0, 0, 0, 0);
+                        if (end < todayZero) {
+                            overdueCount++;
+                            window.portalTaskData.overdue.push(task);
+                        }
+                    }
+                }
+            });
+
+            // Count up animation
+            document.getElementById('stat-customer').innerText = customerCount;
+            document.getElementById('stat-review').innerText = reviewCount;
+            document.getElementById('stat-revision').innerText = revisionCount;
+            document.getElementById('stat-unplanned').innerText = unplannedCount;
+            document.getElementById('stat-overdue').innerText = overdueCount;
+
+            window.portalMemberStats = memberStats;
+            renderPlanChart(teamTotalTasks);
+            renderMemberChart(memberStats);
+        }
+
+        let memberChartInstance = null;
+
+        function renderMemberChart(memberStats) {
+            const ctx = document.getElementById('memberTasksChart');
+            if (!ctx) return;
+
+            const labels = [];
+            const dataCustomer = [];
+            const dataReview = [];
+            const dataRevision = [];
+            const dataDev = [];
+
+            Object.values(memberStats).forEach(stat => {
+                labels.push(stat.name);
+                dataCustomer.push(stat.customer);
+                dataReview.push(stat.review);
+                dataRevision.push(stat.revision);
+                dataDev.push(stat.dev);
+            });
+
+            if (memberChartInstance) {
+                memberChartInstance.destroy();
+            }
+
+            memberChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Tổng task khách hàng',
+                            data: dataCustomer,
+                            backgroundColor: '#4f46e5',
+                            borderRadius: 4
+                        },
+                        {
+                            label: 'Tổng task review',
+                            data: dataReview,
+                            backgroundColor: '#9333ea',
+                            borderRadius: 4
+                        },
+                        {
+                            label: 'Tổng task revision',
+                            data: dataRevision,
+                            backgroundColor: '#db2777',
+                            borderRadius: 4
+                        },
+                        {
+                            label: 'Tổng task dev chưa xử lý',
+                            data: dataDev,
+                            backgroundColor: '#0ea5e9',
+                            borderRadius: 4
+                        }
+                    ]
+                },
+                options: {
+                    onClick: (event, elements, chart) => {
+                        if (!elements || elements.length === 0) return;
+                        const element = elements[0];
+                        const datasetIndex = element.datasetIndex;
+                        const index = element.index;
+
+                        const userKeys = Object.keys(window.portalMemberStats);
+                        const userId = userKeys[index];
+                        const stat = window.portalMemberStats[userId];
+
+                        let tasks = [];
+                        let titleSuffix = '';
+
+                        if (datasetIndex === 0) {
+                            tasks = stat.customerTasks;
+                            titleSuffix = 'Task Khách Hàng';
+                        } else if (datasetIndex === 1) {
+                            tasks = stat.reviewTasks;
+                            titleSuffix = 'Task Đang Chờ Review';
+                        } else if (datasetIndex === 2) {
+                            tasks = stat.revisionTasks;
+                            titleSuffix = 'Task Cần Xem Lại (Revision)';
+                        } else if (datasetIndex === 3) {
+                            tasks = stat.devTasks;
+                            titleSuffix = 'Task Dev Chưa Xử Lý';
+                        }
+
+                        if (tasks && tasks.length > 0) {
+                            window.showMemberTasks(`${titleSuffix} - ${stat.name}`, tasks);
+                        }
+                    },
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                stepSize: 1
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                            labels: {
+                                font: {
+                                    family: "'Inter', sans-serif"
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        let currentWeekOffset = 0;
+        let portalChartTasks = [];
+        let activeChartDate = new Date();
+        activeChartDate.setHours(0, 0, 0, 0);
+
+        function changePortalWeek(delta) {
+            currentWeekOffset += delta;
+            renderPlanChart();
+        }
+
+        function renderPlanChart(tasks) {
+            if (tasks) portalChartTasks = tasks;
+
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            // Determine start of week (Monday)
+            const dayOfWeek = today.getDay();
+            const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+            const startOfWeek = new Date(today);
+            startOfWeek.setDate(today.getDate() + diffToMonday + (currentWeekOffset * 7));
+
+            const weekDates = [];
+            for (let i = 0; i < 7; i++) {
+                const d = new Date(startOfWeek);
+                d.setDate(startOfWeek.getDate() + i);
+                weekDates.push(d);
+            }
+
+            // Update Week Range Text
+            const formatDateShort = d => `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getFullYear()}`;
+            document.getElementById('portal-week-range').innerText = `${formatDateShort(weekDates[0])} - ${formatDateShort(weekDates[6])}`;
+
+            const memberConfigs = [
+                { id: 'huongntt', name: 'Hường', color: '#4f46e5' },
+                { id: 'trangttt', name: 'Trang', color: '#db2777' },
+                { id: 'phuonghtm1', name: 'Phương H.', color: '#059669' },
+                { id: 'phuongntb', name: 'Phương N.', color: '#d97706' }
+            ];
+
+            const chartContainer = document.getElementById('custom-chart-container');
+            chartContainer.innerHTML = '';
+
+            const formatDayOfWeek = d => ['CN', 'TH 2', 'TH 3', 'TH 4', 'TH 5', 'TH 6', 'TH 7'][d.getDay()];
+
+            let selectedTasks = [];
+            let selectedSum = 0;
+
+            weekDates.forEach(dateObj => {
+                const isSelected = dateObj.getTime() === activeChartDate.getTime();
+
+                let memberHours = [0, 0, 0, 0];
+                let tasksForThisDay = [];
+
+                portalChartTasks.forEach(task => {
+                    let meta = {};
+                    try {
+                        const raw = localStorage.getItem('taskMeta_' + task.id);
+                        if (raw) meta = JSON.parse(raw);
+                    } catch (e) { }
+
+                    if (meta.startDate && meta.endDate) {
+                        const start = new Date(meta.startDate);
+                        start.setHours(0, 0, 0, 0);
+                        const end = new Date(meta.endDate);
+                        end.setHours(23, 59, 59, 999);
+
+                        if (dateObj >= start && dateObj <= end) {
+                            const isCustomerProj = String(task.project_id) === '44977878';
+                            const labels = (task.labels || []).map(l => l.toLowerCase());
+                            if (labels.some(l => l.includes('done'))) return;
+
+                            let estHours = parseFloat(meta.estimate) || 0;
+                            if (estHours > 24) estHours = estHours / 60;
+
+                            let userMatched = false;
+
+                            memberConfigs.forEach((m, i) => {
+                                const isAssignee = task.assignees?.some(a => a.username === m.id);
+                                const isAuthor = task.author?.username === m.id;
+
+                                let belongsToUser = false;
+                                if (isCustomerProj && (isAssignee || isAuthor)) belongsToUser = true;
+                                if (!isCustomerProj && isAuthor && !labels.some(l => l.includes('review') || l.includes('revision'))) belongsToUser = true;
+                                if (!isCustomerProj && isAssignee && labels.some(l => l.includes('review') || l.includes('revision'))) belongsToUser = true;
+
+                                if (belongsToUser) {
+                                    memberHours[i] += estHours;
+                                    userMatched = true;
+                                }
+                            });
+
+                            if (userMatched) {
+                                tasksForThisDay.push(task);
+                            }
+                        }
+                    }
+                });
+
+                const uniqueTasks = Array.from(new Set(tasksForThisDay));
+                if (isSelected) {
+                    selectedTasks = uniqueTasks;
+                    selectedSum = memberHours.reduce((a, b) => a + b, 0);
+                }
+
+                const colDiv = document.createElement('div');
+                colDiv.style.flex = '1';
+                colDiv.style.display = 'flex';
+                colDiv.style.flexDirection = 'column';
+                colDiv.style.alignItems = 'center';
+                colDiv.style.height = '100%';
+                colDiv.style.cursor = 'pointer';
+
+                const borderCol = isSelected ? 'border: 2px solid #4f46e5; background: #ffffff;' : 'border: 2px solid transparent; background: #f8fafc;';
+                const textColor = isSelected ? 'color: #4f46e5; font-weight: 700;' : 'color: #64748b; font-weight: 500;';
+
+                let barsHtml = `<div style="flex:1; width:100%; display:flex; align-items:flex-end; gap:2px; justify-content:center; padding:0 4px;">`;
+                memberHours.forEach((mh, i) => {
+                    const heightPct = Math.min(100, (mh / 8) * 100);
+                    barsHtml += `<div style="width:8px; height:${heightPct}%; background:${memberConfigs[i].color}; border-radius:2px 2px 0 0;" title="${memberConfigs[i].name}: ${mh.toFixed(1)}h"></div>`;
+                });
+                barsHtml += `</div>`;
+
+                colDiv.innerHTML = `
+                    <div style="flex:1; width:100%; border-radius:8px; ${borderCol} display:flex; flex-direction:column; overflow:hidden; transition:all 0.2s;">
+                        ${barsHtml}
+                    </div>
+                    <div style="${textColor} font-size:10px; margin-top:8px; text-align:center; line-height:1.4;">
+                        <div>${formatDayOfWeek(dateObj)}</div>
+                        <div>${dateObj.getDate()}/${dateObj.getMonth() + 1}</div>
+                    </div>
+                `;
+
+                colDiv.onclick = () => {
+                    activeChartDate = new Date(dateObj.getTime());
+                    renderPlanChart();
+                };
+
+                chartContainer.appendChild(colDiv);
+            });
+
+            document.getElementById('portal-selected-date-title').innerText = `${activeChartDate.getDate().toString().padStart(2, '0')}/${(activeChartDate.getMonth() + 1).toString().padStart(2, '0')}/${activeChartDate.getFullYear()}`;
+            document.getElementById('portal-selected-date-count').innerText = `${selectedTasks.length} task`;
+            document.getElementById('chart-selected-sum').innerText = `${selectedSum.toFixed(1)}h`;
+
+            const taskContainer = document.getElementById('portal-selected-date-tasks');
+            taskContainer.innerHTML = '';
+
+            if (selectedTasks.length === 0) {
+                taskContainer.innerHTML = `<div style="color:#94a3b8; font-style:italic; font-size:13px; text-align:center; margin-top:40px;">Không có task phân bổ trong ngày này</div>`;
+            } else {
+                selectedTasks.forEach(t => {
+                    const assignees = t.assignees && t.assignees.length > 0 ? t.assignees.map(a => a.name).join(', ') : 'Chưa phân công';
+                    const el = document.createElement('div');
+                    el.style.background = '#f8fafc';
+                    el.style.border = '1px solid #e2e8f0';
+                    el.style.padding = '12px';
+                    el.style.borderRadius = '8px';
+                    el.innerHTML = `
+                        <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                            <a href="${t.web_url}" target="_blank" style="color:#2563eb; font-weight:700; font-size:13px; text-decoration:none;">#${t.iid}</a>
+                            <span style="font-size:11px; color:#64748b;">${assignees}</span>
+                        </div>
+                        <div style="font-size:13px; color:#1e293b; font-weight:500; line-height:1.4;">${t.title}</div>
+                    `;
+                    taskContainer.appendChild(el);
+                });
+            }
+
+            lucide.createIcons();
+        }
+
+        loadTeamStats();
+    </script>
+
+    <script>
+        const formatDateVNUrl = (dateStr) => {
+            if (!dateStr) return '---';
+            try {
+                const d = new Date(dateStr);
+                if (isNaN(d.getTime())) return dateStr;
+                return d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            } catch (e) {
+                return dateStr;
+            }
+        };
+
+        const getProjectNameTask = (task) => {
+            if (task.references && task.references.full) {
+                const parts = task.references.full.split('#');
+                if (parts.length > 0) {
+                    const pathParts = parts[0].split('/');
+                    return pathParts[pathParts.length - 1] || 'Unknown';
+                }
+            }
+            return 'Unknown';
+        };
+
+        function showPortalTasks(type) {
+            const rawData = window.portalTaskData ? window.portalTaskData[type] : [];
+            const data = [...rawData].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+            const tbody = document.getElementById('table-body');
+            tbody.innerHTML = '';
+
+            let titles = {
+                'customer': 'Danh sách Task Khách Hàng',
+                'review': 'Danh sách Task Đang Chờ Review',
+                'revision': 'Danh sách Task Cần Xem Lại (Revision)',
+                'unplanned': 'Danh sách Task Chưa được lên Kế Hoạch',
+                'overdue': 'Danh sách Task Đã Trễ Hạn Kế Hoạch'
+            };
+
+            document.getElementById('table-title').innerText = titles[type] + ' (' + data.length + ' task)';
+
+            if (!data || data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:40px; color:#64748b;">Tuyệt vời! Không có task nào trong danh sách này.</td></tr>';
+            } else {
+                data.forEach(task => {
+                    const assignees = task.assignees && task.assignees.length > 0
+                        ? task.assignees.map(a => `<span style="background:#e0e7ff; color:#4f46e5; padding:4px 10px; border-radius:100px; font-size:12px; font-weight:600; display:inline-block; margin-right:4px; margin-bottom:4px;">${a.name}</span>`).join('')
+                        : `<span style="background:#f1f5f9; color:#64748b; padding:4px 10px; border-radius:100px; font-size:12px; font-weight:600;">Chưa phân công</span>`;
+
+                    const author = task.author ? task.author.name : 'Unknown';
+                    const projectName = getProjectNameTask(task);
+                    const createdAt = formatDateVNUrl(task.created_at);
+
+                    const tr = document.createElement('tr');
+                    tr.style.borderBottom = '1px solid #f1f5f9';
+                    tr.style.transition = 'background 0.2s';
+                    tr.onmouseover = () => tr.style.background = '#f8fafc';
+                    tr.onmouseout = () => tr.style.background = 'transparent';
+
+                    tr.innerHTML = `
+                        <td style="padding:16px 24px; vertical-align:top; width:60px;">
+                            <a href="${task.web_url}" target="_blank" style="color:#2563eb; font-weight:700; text-decoration:none;">#${task.iid}</a>
+                        </td>
+                        <td style="padding:16px 24px; vertical-align:top; width:120px;">
+                            <div style="background:#f1f5f9; color:#475569; font-size:12px; font-weight:600; padding:4px 8px; border-radius:6px; display:inline-block; border:1px solid #e2e8f0; white-space:nowrap;">${projectName}</div>
+                        </td>
+                        <td style="padding:16px 24px; color:#1e293b; font-weight:500; line-height:1.5; vertical-align:top;">${task.title}</td>
+                        <td style="padding:16px 24px; vertical-align:top; white-space:nowrap; color:#475569; font-size:13px;">${author}</td>
+                        <td style="padding:16px 24px; vertical-align:top; width:200px;">${assignees}</td>
+                        <td style="padding:16px 24px; vertical-align:top; white-space:nowrap; color:#64748b; font-size:13px;">${createdAt}</td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            }
+
+            document.getElementById('portal-task-container').style.display = 'block';
+            lucide.createIcons();
+        }
+
+        window.showMemberTasks = function (title, data) {
+            const sortedData = [...data].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+            const tbody = document.getElementById('table-body');
+            tbody.innerHTML = '';
+
+            document.getElementById('table-title').innerText = title + ' (' + sortedData.length + ' task)';
+
+            if (!sortedData || sortedData.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:40px; color:#64748b;">Tuyệt vời! Không có task nào trong danh sách này.</td></tr>';
+            } else {
+                sortedData.forEach(task => {
+                    const assignees = task.assignees && task.assignees.length > 0
+                        ? task.assignees.map(a => `<span style="background:#e0e7ff; color:#4f46e5; padding:4px 10px; border-radius:100px; font-size:12px; font-weight:600; display:inline-block; margin-right:4px; margin-bottom:4px;">${a.name}</span>`).join('')
+                        : `<span style="background:#f1f5f9; color:#64748b; padding:4px 10px; border-radius:100px; font-size:12px; font-weight:600;">Chưa phân công</span>`;
+
+                    const author = task.author ? task.author.name : 'Unknown';
+                    const projectName = getProjectNameTask(task);
+                    const createdAt = formatDateVNUrl(task.created_at);
+
+                    const tr = document.createElement('tr');
+                    tr.style.borderBottom = '1px solid #f1f5f9';
+                    tr.style.transition = 'background 0.2s';
+                    tr.onmouseover = () => tr.style.background = '#f8fafc';
+                    tr.onmouseout = () => tr.style.background = 'transparent';
+
+                    tr.innerHTML = `
+                        <td style="padding:16px 24px; vertical-align:top; width:60px;">
+                            <a href="${task.web_url}" target="_blank" style="color:#2563eb; font-weight:700; text-decoration:none;">#${task.iid}</a>
+                        </td>
+                        <td style="padding:16px 24px; vertical-align:top; width:120px;">
+                            <div style="background:#f1f5f9; color:#475569; font-size:12px; font-weight:600; padding:4px 8px; border-radius:6px; display:inline-block; border:1px solid #e2e8f0; white-space:nowrap;">${projectName}</div>
+                        </td>
+                        <td style="padding:16px 24px; color:#1e293b; font-weight:500; line-height:1.5; vertical-align:top;">${task.title}</td>
+                        <td style="padding:16px 24px; vertical-align:top; white-space:nowrap; color:#475569; font-size:13px;">${author}</td>
+                        <td style="padding:16px 24px; vertical-align:top; width:200px;">${assignees}</td>
+                        <td style="padding:16px 24px; vertical-align:top; white-space:nowrap; color:#64748b; font-size:13px;">${createdAt}</td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            }
+
+            document.getElementById('portal-task-container').style.display = 'block';
+            lucide.createIcons();
+        };
+
+        function closePortalTable() {
+            document.getElementById('portal-task-container').style.display = 'none';
+        }
+    </script>
+</body>
+
+</html>
