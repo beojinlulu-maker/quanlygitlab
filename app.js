@@ -1,15 +1,15 @@
-let GITLAB_TOKEN = localStorage.getItem('gitlab_token_saved') || '';
+let GITLAB_TOKEN = localStorage.getItem('gitlab_token_v2') || '';
 if (!GITLAB_TOKEN || !GITLAB_TOKEN.startsWith('glpat-')) {
     const pass = prompt("Yêu cầu xác thực. Vui lòng nhập mật khẩu dự án:");
     if (pass) {
-        const hex = "0005040d154f192c3b2a5403432f19250416242f111c15410a123d364b5d2a38045d2e0832172923321e371b4f52454f4259570c0d09570b0d";
+        const hex = "0005040d154f373b3f2c24393d2036202e06341a0d393c020d231d533e5d2a38041a2e08312a173f0811165e335339204b4557585a5d56524758445e0e00";
         let str = "";
         for(let i=0; i<hex.length; i+=2) {
             str += String.fromCharCode(parseInt(hex.substr(i, 2), 16) ^ pass.charCodeAt((i/2) % pass.length));
         }
         if (str.startsWith('glpat-')) {
             GITLAB_TOKEN = str;
-            localStorage.setItem('gitlab_token_saved', str);
+            localStorage.setItem('gitlab_token_v2', str);
         } else {
             alert("Mật khẩu sai. Dữ liệu sẽ không được tải!");
         }
