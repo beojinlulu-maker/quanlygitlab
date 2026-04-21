@@ -642,10 +642,12 @@
             todayZero.setHours(0, 0, 0, 0);
 
             teamTotalTasks.forEach(task => {
-                let meta = {};
+                let meta = (window.taskMetaMap && window.taskMetaMap[task.id]) || {};
                 try {
-                    const data = localStorage.getItem('taskMeta_' + task.id);
-                    if (data) meta = JSON.parse(data);
+                    if (!meta.startDate) {
+                        const data = localStorage.getItem('taskMeta_' + task.id);
+                        if (data) meta = JSON.parse(data);
+                    }
                 } catch (e) { }
 
                 const labels = (task.labels || []).map(l => l.toLowerCase());
@@ -851,10 +853,12 @@
                 let tasksForThisDay = [];
 
                 portalChartTasks.forEach(task => {
-                    let meta = {};
+                    let meta = (window.taskMetaMap && window.taskMetaMap[task.id]) || {};
                     try {
-                        const raw = localStorage.getItem('taskMeta_' + task.id);
-                        if (raw) meta = JSON.parse(raw);
+                        if (!meta.startDate) {
+                            const raw = localStorage.getItem('taskMeta_' + task.id);
+                            if (raw) meta = JSON.parse(raw);
+                        }
                     } catch (e) { }
 
                     if (meta.startDate && meta.endDate) {
@@ -967,9 +971,6 @@
 
             lucide.createIcons();
         }
-
-        loadTeamStats();
-    </script>
 
     <script>
         const formatDateVNUrl = (dateStr) => {
@@ -1093,12 +1094,24 @@
             document.getElementById('portal-task-container').style.display = 'block';
             lucide.createIcons();
         };
-
+    </script>
+    <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-analytics-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore-compat.js"></script>
+    <script src="firebase-config.js"></script>
+    <script>
         function closePortalTable() {
             document.getElementById('portal-task-container').style.display = 'none';
         }
+        
+        async function runPortal() {
+            if (window.loadAllTaskMetaFromFirestore) {
+                await window.loadAllTaskMetaFromFirestore();
+            }
+            loadTeamStats();
+        }
+        runPortal();
     </script>
-    <script type="module" src="firebase-config.js"></script>
 </body>
 
 </html>

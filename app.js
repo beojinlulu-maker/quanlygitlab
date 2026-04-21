@@ -77,6 +77,9 @@ const getProjectName = (task) => {
 
 // LocalStorage Manager
 const loadTaskMeta = (taskId) => {
+    if (window.taskMetaMap && window.taskMetaMap[taskId]) {
+        return window.taskMetaMap[taskId];
+    }
     const data = localStorage.getItem(`taskMeta_${taskId}`);
     if (data) return JSON.parse(data);
     return {
@@ -90,7 +93,13 @@ const loadTaskMeta = (taskId) => {
 };
 
 const saveTaskMeta = (taskId, meta) => {
+    if (window.taskMetaMap) window.taskMetaMap[taskId] = meta;
     localStorage.setItem(`taskMeta_${taskId}`, JSON.stringify(meta));
+    if (window.db) {
+        window.db.collection("taskMeta").doc(String(taskId)).set(meta).catch(e => {
+            console.error("Error saving task meta to Firestore:", e);
+        });
+    }
 };
 
 const handleTaskMetaLogic = (task) => {
@@ -1021,11 +1030,14 @@ window.changePlannerWeek = (offset) => {
     renderPlanner();
 };
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     // Initial static population in case fetch takes time
     const nameEl = document.getElementById('dashboard-user-name');
     if (nameEl) {
         nameEl.textContent = `- User: @${TARGET_USER}`;
+    }
+    if (window.loadAllTaskMetaFromFirestore) {
+        await window.loadAllTaskMetaFromFirestore();
     }
     fetchTodayEvents();
     fetchCustomerTasks();

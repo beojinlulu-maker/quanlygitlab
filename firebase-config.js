@@ -1,6 +1,3 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-app.js";
-import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-analytics.js";
-
 const firebaseConfig = {
   apiKey: "AIzaSyBvOcu9XetN4UyUMgAnXK3ZLW2N4nqfXQY",
   authDomain: "quanlygitlab.firebaseapp.com",
@@ -11,6 +8,24 @@ const firebaseConfig = {
   measurementId: "G-RWV2THCM0L"
 };
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
+// Initialize Firebase using compat syntax
+if (typeof firebase !== 'undefined') {
+  firebase.initializeApp(firebaseConfig);
+  firebase.analytics();
+  window.db = firebase.firestore();
+}
+
+window.taskMetaMap = {};
+
+window.loadAllTaskMetaFromFirestore = async function() {
+    if (!window.db) return;
+    try {
+        const querySnapshot = await window.db.collection("taskMeta").get();
+        querySnapshot.forEach((doc) => {
+            window.taskMetaMap[doc.id] = doc.data();
+        });
+        console.log("Loaded all taskMeta from Firestore:", Object.keys(window.taskMetaMap).length);
+    } catch (error) {
+        console.error("Lỗi khi tải dữ liệu từ Firestore:", error);
+    }
+}
