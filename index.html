@@ -168,31 +168,7 @@
             border-color: #cbd5e1;
         }
 
-        .portal-loading-overlay {
-            position: fixed;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(248, 250, 252, 0.85);
-            z-index: 9999;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            backdrop-filter: blur(4px);
-            transition: opacity 0.3s ease, visibility 0.3s ease;
-        }
-        .portal-loading-overlay.hidden {
-            opacity: 0;
-            visibility: hidden;
-            pointer-events: none;
-        }
-        .portal-spinner {
-            width: 48px; height: 48px;
-            border: 5px solid #e0e7ff;
-            border-top-color: #4f46e5;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin-bottom: 20px;
-        }
+        .hidden { display: none !important; }
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
@@ -200,17 +176,12 @@
 </head>
 
 <body>
-    <div id="portal-loading" class="portal-loading-overlay">
-        <div class="portal-spinner"></div>
-        <div style="font-family: 'Outfit', sans-serif; font-size: 20px; color: var(--text-main); font-weight: 700;">Đang thiết lập dữ liệu Portal...</div>
-        <div style="font-size: 15px; color: var(--text-muted); margin-top: 8px; text-align: center;">Chờ trong giây lát. Hệ thống đang đồng bộ với GitLab.</div>
-    </div>
-
     <div class="portal-container">
         <div class="portal-header">
             <h1 style="display:flex; align-items:center; justify-content:center; gap: 12px;">
                 <i data-lucide="layout-dashboard" style="width: 32px; height: 32px; color: #4f46e5;"></i>
                 Quản lý task Gitlab
+                <span id="portal-loading" style="width: 20px; height: 20px; border: 3px solid #e2e8f0; border-top-color: #4f46e5; border-radius: 50%; animation: spin 1s linear infinite;"></span>
             </h1>
             <p>Chọn thành viên để xem công việc chi tiết trên GitLab</p>
         </div>
