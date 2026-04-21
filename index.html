@@ -168,9 +168,14 @@
             border-color: #cbd5e1;
         }
 
-        .hidden { display: none !important; }
+        .hidden {
+            display: none !important;
+        }
+
         @keyframes spin {
-            to { transform: rotate(360deg); }
+            to {
+                transform: rotate(360deg);
+            }
         }
     </style>
 </head>
@@ -181,7 +186,8 @@
             <h1 style="display:flex; align-items:center; justify-content:center; gap: 12px;">
                 <i data-lucide="layout-dashboard" style="width: 32px; height: 32px; color: #4f46e5;"></i>
                 Quản lý task Gitlab
-                <span id="portal-loading" style="width: 20px; height: 20px; border: 3px solid #e2e8f0; border-top-color: #4f46e5; border-radius: 50%; animation: spin 1s linear infinite;"></span>
+                <span id="portal-loading"
+                    style="width: 20px; height: 20px; border: 3px solid #e2e8f0; border-top-color: #4f46e5; border-radius: 50%; animation: spin 1s linear infinite;"></span>
             </h1>
             <p>Chọn thành viên để xem công việc chi tiết trên GitLab</p>
         </div>
@@ -479,8 +485,8 @@
                     if (pass) {
                         const hex = "0005040d154f373b3f2c24393d2036202e06341a0d393c020d231d533e5d2a38041a2e08312a173f0811165e335339204b4557585a5d56524758445e0e00";
                         let str = "";
-                        for(let i=0; i<hex.length; i+=2) {
-                            str += String.fromCharCode(parseInt(hex.substr(i, 2), 16) ^ pass.charCodeAt((i/2) % pass.length));
+                        for (let i = 0; i < hex.length; i += 2) {
+                            str += String.fromCharCode(parseInt(hex.substr(i, 2), 16) ^ pass.charCodeAt((i / 2) % pass.length));
                         }
                         if (str.startsWith('glpat-')) {
                             GITLAB_TOKEN = str;
@@ -493,19 +499,34 @@
                         return;
                     }
                 }
-            const GITLAB_BASE_URL = 'https://gitlab.com/api/v4';
-            const GROUP_IDS = ['4922129', '3590912', '58863801'];
-            const CUSTOMER_PROJECT_ID = '44977878';
-            const CREATED_AFTER = '2025-01-01T00:00:00Z';
-            const TEAM_USERS = ['huongntt', 'trangttt', 'phuonghtm1', 'phuongntb'];
+                const GITLAB_BASE_URL = 'https://gitlab.com/api/v4';
+                const GROUP_IDS = ['4922129', '3590912', '58863801'];
+                const CUSTOMER_PROJECT_ID = '44977878';
+                const CREATED_AFTER = '2025-01-01T00:00:00Z';
+                const TEAM_USERS = ['huongntt', 'trangttt', 'phuonghtm1', 'phuongntb'];
 
-            let allIssues = [];
+                let allIssues = [];
 
-            // 1. Fetch Group Issues
-            for (const groupId of GROUP_IDS) {
+                // 1. Fetch Group Issues
+                for (const groupId of GROUP_IDS) {
+                    let page = 1;
+                    while (true) {
+                        const url = `${GITLAB_BASE_URL}/groups/${groupId}/issues?created_after=${CREATED_AFTER}&per_page=100&page=${page}&state=opened`;
+                        try {
+                            const res = await fetch(url, { headers: { 'PRIVATE-TOKEN': GITLAB_TOKEN } });
+                            if (!res.ok) break;
+                            const data = await res.json();
+                            if (data.length === 0) break;
+                            allIssues = allIssues.concat(data);
+                            page++;
+                        } catch (e) { break; }
+                    }
+                }
+
+                // 2. Fetch Customer Issues
                 let page = 1;
                 while (true) {
-                    const url = `${GITLAB_BASE_URL}/groups/${groupId}/issues?created_after=${CREATED_AFTER}&per_page=100&page=${page}&state=opened`;
+                    const url = `${GITLAB_BASE_URL}/projects/${CUSTOMER_PROJECT_ID}/issues?created_after=${CREATED_AFTER}&per_page=100&page=${page}&state=opened`;
                     try {
                         const res = await fetch(url, { headers: { 'PRIVATE-TOKEN': GITLAB_TOKEN } });
                         if (!res.ok) break;
@@ -515,188 +536,173 @@
                         page++;
                     } catch (e) { break; }
                 }
-            }
 
-            // 2. Fetch Customer Issues
-            let page = 1;
-            while (true) {
-                const url = `${GITLAB_BASE_URL}/projects/${CUSTOMER_PROJECT_ID}/issues?created_after=${CREATED_AFTER}&per_page=100&page=${page}&state=opened`;
-                try {
-                    const res = await fetch(url, { headers: { 'PRIVATE-TOKEN': GITLAB_TOKEN } });
-                    if (!res.ok) break;
-                    const data = await res.json();
-                    if (data.length === 0) break;
-                    allIssues = allIssues.concat(data);
-                    page++;
-                } catch (e) { break; }
-            }
-
-            // Remove duplicates
-            const uniqueIssues = [];
-            const seenIds = new Set();
-            for (const issue of allIssues) {
-                if (!seenIds.has(issue.id)) {
-                    seenIds.add(issue.id);
-                    uniqueIssues.push(issue);
-                }
-            }
-
-            // Sync with dashboard: Fetch notes for customer tasks to check if linked to a dev task (contains gitlab.com)
-            // AND fetch notes for review/revision tasks to see who is a commenter
-            const enrichedIssues = await Promise.all(uniqueIssues.map(async (issue) => {
-                const isCustomerProj = String(issue.project_id) === CUSTOMER_PROJECT_ID;
-                const labels = (issue.labels || []).map(l => l.toLowerCase());
-                const isReviewOrRevision = !isCustomerProj && labels.some(l => l.includes('review') || l.includes('revision'));
-
-                if (!isCustomerProj && !isReviewOrRevision) return issue;
-
-                let notesData = [];
-                try {
-                    const notesRes = await fetch(`${GITLAB_BASE_URL}/projects/${issue.project_id}/issues/${issue.iid}/notes?per_page=100`, { headers: { 'PRIVATE-TOKEN': GITLAB_TOKEN } });
-                    if (notesRes.ok) {
-                        notesData = await notesRes.json();
+                // Remove duplicates
+                const uniqueIssues = [];
+                const seenIds = new Set();
+                for (const issue of allIssues) {
+                    if (!seenIds.has(issue.id)) {
+                        seenIds.add(issue.id);
+                        uniqueIssues.push(issue);
                     }
-                } catch (e) { }
+                }
 
-                if (isCustomerProj) {
-                    const hasGitlabLink = notesData.some(n => {
-                        const bodyStr = (n.body || '').toLowerCase();
-                        return bodyStr.includes('gitlab.com');
+                // Sync with dashboard: Fetch notes for customer tasks to check if linked to a dev task (contains gitlab.com)
+                // AND fetch notes for review/revision tasks to see who is a commenter
+                const enrichedIssues = await Promise.all(uniqueIssues.map(async (issue) => {
+                    const isCustomerProj = String(issue.project_id) === CUSTOMER_PROJECT_ID;
+                    const labels = (issue.labels || []).map(l => l.toLowerCase());
+                    const isReviewOrRevision = !isCustomerProj && labels.some(l => l.includes('review') || l.includes('revision'));
+
+                    if (!isCustomerProj && !isReviewOrRevision) return issue;
+
+                    let notesData = [];
+                    try {
+                        const notesRes = await fetch(`${GITLAB_BASE_URL}/projects/${issue.project_id}/issues/${issue.iid}/notes?per_page=100`, { headers: { 'PRIVATE-TOKEN': GITLAB_TOKEN } });
+                        if (notesRes.ok) {
+                            notesData = await notesRes.json();
+                        }
+                    } catch (e) { }
+
+                    if (isCustomerProj) {
+                        const hasGitlabLink = notesData.some(n => {
+                            const bodyStr = (n.body || '').toLowerCase();
+                            return bodyStr.includes('gitlab.com');
+                        });
+                        if (hasGitlabLink) return null;
+                    }
+
+                    issue.custom_notes_cache = notesData;
+                    return issue;
+                }));
+
+                const finalIssues = enrichedIssues.filter(i => i !== null);
+
+                // Precise filter mirroring the individual dashboards
+                const teamTotalTasks = [];
+                window.portalTaskData = { customer: [], review: [], revision: [], unplanned: [], overdue: [] };
+                let customerCount = 0;
+                let reviewCount = 0;
+                let revisionCount = 0;
+
+                const memberStats = {
+                    huongntt: { customer: 0, review: 0, revision: 0, dev: 0, customerTasks: [], reviewTasks: [], revisionTasks: [], devTasks: [], name: 'Hường' },
+                    trangttt: { customer: 0, review: 0, revision: 0, dev: 0, customerTasks: [], reviewTasks: [], revisionTasks: [], devTasks: [], name: 'Trang' },
+                    phuonghtm1: { customer: 0, review: 0, revision: 0, dev: 0, customerTasks: [], reviewTasks: [], revisionTasks: [], devTasks: [], name: 'Phương H.' },
+                    phuongntb: { customer: 0, review: 0, revision: 0, dev: 0, customerTasks: [], reviewTasks: [], revisionTasks: [], devTasks: [], name: 'Phương N.' }
+                };
+
+                finalIssues.forEach(issue => {
+                    const labels = (issue.labels || []).map(l => l.toLowerCase());
+                    if (labels.some(l => l.includes('done'))) return;
+
+                    const isCustomerProj = String(issue.project_id) === CUSTOMER_PROJECT_ID;
+
+                    let isTeamCustomerTask = false;
+                    let isTeamDevTask = false;
+                    let isTeamReviewTask = false;
+                    let isTeamRevisionTask = false;
+
+                    TEAM_USERS.forEach(user => {
+                        const isAssignee = issue.assignees?.some(a => a.username === user);
+                        const isAuthor = issue.author?.username === user;
+                        const isCommenter = (issue.custom_notes_cache || []).some(n => n.author?.username === user);
+
+                        let memberHasCustomer = false;
+                        let memberHasDev = false;
+                        let memberHasReview = false;
+                        let memberHasRevision = false;
+
+                        if (isCustomerProj && (isAssignee || isAuthor)) {
+                            memberHasCustomer = true;
+                            isTeamCustomerTask = true;
+                        }
+                        if (!isCustomerProj && isAuthor && !labels.some(l => l.includes('review') || l.includes('revision'))) {
+                            memberHasDev = true;
+                            isTeamDevTask = true;
+                        }
+                        if (!isCustomerProj && labels.some(l => l.includes('review'))) {
+                            if (isAssignee) memberHasReview = true;
+                            if (isAssignee || isAuthor || isCommenter) isTeamReviewTask = true;
+                        }
+                        if (!isCustomerProj && (isAssignee || isAuthor || isCommenter) && labels.some(l => l.includes('revision'))) {
+                            memberHasRevision = true;
+                            isTeamRevisionTask = true;
+                        }
+
+                        if (memberHasCustomer) { memberStats[user].customer++; memberStats[user].customerTasks.push(issue); }
+                        if (memberHasDev) { memberStats[user].dev++; memberStats[user].devTasks.push(issue); }
+                        if (memberHasReview) { memberStats[user].review++; memberStats[user].reviewTasks.push(issue); }
+                        if (memberHasRevision) { memberStats[user].revision++; memberStats[user].revisionTasks.push(issue); }
                     });
-                    if (hasGitlabLink) return null;
-                }
 
-                issue.custom_notes_cache = notesData;
-                return issue;
-            }));
-
-            const finalIssues = enrichedIssues.filter(i => i !== null);
-
-            // Precise filter mirroring the individual dashboards
-            const teamTotalTasks = [];
-            window.portalTaskData = { customer: [], review: [], revision: [], unplanned: [], overdue: [] };
-            let customerCount = 0;
-            let reviewCount = 0;
-            let revisionCount = 0;
-
-            const memberStats = {
-                huongntt: { customer: 0, review: 0, revision: 0, dev: 0, customerTasks: [], reviewTasks: [], revisionTasks: [], devTasks: [], name: 'Hường' },
-                trangttt: { customer: 0, review: 0, revision: 0, dev: 0, customerTasks: [], reviewTasks: [], revisionTasks: [], devTasks: [], name: 'Trang' },
-                phuonghtm1: { customer: 0, review: 0, revision: 0, dev: 0, customerTasks: [], reviewTasks: [], revisionTasks: [], devTasks: [], name: 'Phương H.' },
-                phuongntb: { customer: 0, review: 0, revision: 0, dev: 0, customerTasks: [], reviewTasks: [], revisionTasks: [], devTasks: [], name: 'Phương N.' }
-            };
-
-            finalIssues.forEach(issue => {
-                const labels = (issue.labels || []).map(l => l.toLowerCase());
-                if (labels.some(l => l.includes('done'))) return;
-
-                const isCustomerProj = String(issue.project_id) === CUSTOMER_PROJECT_ID;
-
-                let isTeamCustomerTask = false;
-                let isTeamDevTask = false;
-                let isTeamReviewTask = false;
-                let isTeamRevisionTask = false;
-
-                TEAM_USERS.forEach(user => {
-                    const isAssignee = issue.assignees?.some(a => a.username === user);
-                    const isAuthor = issue.author?.username === user;
-                    const isCommenter = (issue.custom_notes_cache || []).some(n => n.author?.username === user);
-
-                    let memberHasCustomer = false;
-                    let memberHasDev = false;
-                    let memberHasReview = false;
-                    let memberHasRevision = false;
-
-                    if (isCustomerProj && (isAssignee || isAuthor)) {
-                        memberHasCustomer = true;
-                        isTeamCustomerTask = true;
-                    }
-                    if (!isCustomerProj && isAuthor && !labels.some(l => l.includes('review') || l.includes('revision'))) {
-                        memberHasDev = true;
-                        isTeamDevTask = true;
-                    }
-                    if (!isCustomerProj && labels.some(l => l.includes('review'))) {
-                        if (isAssignee) memberHasReview = true;
-                        if (isAssignee || isAuthor || isCommenter) isTeamReviewTask = true;
-                    }
-                    if (!isCustomerProj && (isAssignee || isAuthor || isCommenter) && labels.some(l => l.includes('revision'))) {
-                        memberHasRevision = true;
-                        isTeamRevisionTask = true;
-                    }
-
-                    if (memberHasCustomer) { memberStats[user].customer++; memberStats[user].customerTasks.push(issue); }
-                    if (memberHasDev) { memberStats[user].dev++; memberStats[user].devTasks.push(issue); }
-                    if (memberHasReview) { memberStats[user].review++; memberStats[user].reviewTasks.push(issue); }
-                    if (memberHasRevision) { memberStats[user].revision++; memberStats[user].revisionTasks.push(issue); }
-                });
-
-                if (isTeamCustomerTask || isTeamDevTask || isTeamReviewTask || isTeamRevisionTask) {
-                    teamTotalTasks.push(issue);
-                    if (isTeamCustomerTask) {
-                        customerCount++;
-                        window.portalTaskData.customer.push(issue);
-                    }
-                    if (isTeamReviewTask) {
-                        reviewCount++;
-                        window.portalTaskData.review.push(issue);
-                    }
-                    if (isTeamRevisionTask) {
-                        revisionCount++;
-                        window.portalTaskData.revision.push(issue);
-                    }
-                }
-            });
-
-            let unplannedCount = 0;
-            let overdueCount = 0;
-
-            const todayZero = new Date();
-            todayZero.setHours(0, 0, 0, 0);
-
-            teamTotalTasks.forEach(task => {
-                let meta = (window.taskMetaMap && window.taskMetaMap[task.id]) || {};
-                try {
-                    if (!meta.startDate) {
-                        const data = localStorage.getItem('taskMeta_' + task.id);
-                        if (data) meta = JSON.parse(data);
-                    }
-                } catch (e) { }
-
-                const labels = (task.labels || []).map(l => l.toLowerCase());
-                const isRevision = labels.some(l => l.includes('revision'));
-
-                // Unplanned logic
-                const hasAnyPlan = meta.startDate || meta.endDate;
-                const isAssigneeForAnyMember = TEAM_USERS.some(user => task.assignees?.some(a => a.username === user));
-
-                if (!isRevision && !hasAnyPlan && isAssigneeForAnyMember) {
-                    unplannedCount++;
-                    window.portalTaskData.unplanned.push(task);
-                }
-
-                // Overdue logic
-                if (!isRevision && (meta.startDate || meta.endDate)) {
-                    if (meta.endDate) {
-                        const end = new Date(meta.endDate);
-                        end.setHours(0, 0, 0, 0);
-                        if (end < todayZero) {
-                            overdueCount++;
-                            window.portalTaskData.overdue.push(task);
+                    if (isTeamCustomerTask || isTeamDevTask || isTeamReviewTask || isTeamRevisionTask) {
+                        teamTotalTasks.push(issue);
+                        if (isTeamCustomerTask) {
+                            customerCount++;
+                            window.portalTaskData.customer.push(issue);
+                        }
+                        if (isTeamReviewTask) {
+                            reviewCount++;
+                            window.portalTaskData.review.push(issue);
+                        }
+                        if (isTeamRevisionTask) {
+                            revisionCount++;
+                            window.portalTaskData.revision.push(issue);
                         }
                     }
-                }
-            });
+                });
 
-            // Count up animation
-            document.getElementById('stat-customer').innerText = customerCount;
-            document.getElementById('stat-review').innerText = reviewCount;
-            document.getElementById('stat-revision').innerText = revisionCount;
-            document.getElementById('stat-unplanned').innerText = unplannedCount;
-            document.getElementById('stat-overdue').innerText = overdueCount;
+                let unplannedCount = 0;
+                let overdueCount = 0;
 
-            window.portalMemberStats = memberStats;
-            renderPlanChart(teamTotalTasks);
-            renderMemberChart(memberStats);
+                const todayZero = new Date();
+                todayZero.setHours(0, 0, 0, 0);
+
+                teamTotalTasks.forEach(task => {
+                    let meta = (window.taskMetaMap && window.taskMetaMap[task.id]) || {};
+                    try {
+                        if (!meta.startDate) {
+                            const data = localStorage.getItem('taskMeta_' + task.id);
+                            if (data) meta = JSON.parse(data);
+                        }
+                    } catch (e) { }
+
+                    const labels = (task.labels || []).map(l => l.toLowerCase());
+                    const isRevision = labels.some(l => l.includes('revision'));
+
+                    // Unplanned logic
+                    const hasAnyPlan = meta.startDate || meta.endDate;
+                    const isAssigneeForAnyMember = TEAM_USERS.some(user => task.assignees?.some(a => a.username === user));
+
+                    if (!isRevision && !hasAnyPlan && isAssigneeForAnyMember) {
+                        unplannedCount++;
+                        window.portalTaskData.unplanned.push(task);
+                    }
+
+                    // Overdue logic
+                    if (!isRevision && (meta.startDate || meta.endDate)) {
+                        if (meta.endDate) {
+                            const end = new Date(meta.endDate);
+                            end.setHours(0, 0, 0, 0);
+                            if (end < todayZero) {
+                                overdueCount++;
+                                window.portalTaskData.overdue.push(task);
+                            }
+                        }
+                    }
+                });
+
+                // Count up animation
+                document.getElementById('stat-customer').innerText = customerCount;
+                document.getElementById('stat-review').innerText = reviewCount;
+                document.getElementById('stat-revision').innerText = revisionCount;
+                document.getElementById('stat-unplanned').innerText = unplannedCount;
+                document.getElementById('stat-overdue').innerText = overdueCount;
+
+                window.portalMemberStats = memberStats;
+                renderPlanChart(teamTotalTasks);
+                renderMemberChart(memberStats);
             } finally {
                 const loader = document.getElementById('portal-loading');
                 if (loader) loader.classList.add('hidden');
@@ -735,25 +741,25 @@
                         {
                             label: 'Tổng task khách hàng',
                             data: dataCustomer,
-                            backgroundColor: '#4f46e5',
+                            backgroundColor: '#0487d9',
                             borderRadius: 4
                         },
                         {
                             label: 'Tổng task review',
                             data: dataReview,
-                            backgroundColor: '#9333ea',
+                            backgroundColor: '#a0e3f2',
                             borderRadius: 4
                         },
                         {
                             label: 'Tổng task revision',
                             data: dataRevision,
-                            backgroundColor: '#db2777',
+                            backgroundColor: '#f25ea3',
                             borderRadius: 4
                         },
                         {
                             label: 'Tổng task dev chưa xử lý',
                             data: dataDev,
-                            backgroundColor: '#0ea5e9',
+                            backgroundColor: '#04d9d9',
                             borderRadius: 4
                         }
                     ]
@@ -1120,7 +1126,7 @@
         function closePortalTable() {
             document.getElementById('portal-task-container').style.display = 'none';
         }
-        
+
         async function runPortal() {
             if (window.loadAllTaskMetaFromFirestore) {
                 await window.loadAllTaskMetaFromFirestore();
