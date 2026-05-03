@@ -190,6 +190,12 @@
                     style="width: 20px; height: 20px; border: 3px solid #e2e8f0; border-top-color: #4f46e5; border-radius: 50%; animation: spin 1s linear infinite;"></span>
             </h1>
             <p>Chọn thành viên để xem công việc chi tiết trên GitLab</p>
+            <div id="auto-refresh-bar" style="display:inline-flex; align-items:center; gap:8px; margin-top:12px; background:#f1f5f9; padding:6px 16px; border-radius:100px; font-size:12px; color:#64748b; font-weight:500; transition:all 0.3s;">
+                <i data-lucide="refresh-cw" style="width:13px; height:13px; cursor:pointer; transition:transform 0.3s;" onclick="manualRefresh()" title="Tải lại ngay"></i>
+                <span id="last-updated-text">Đang tải dữ liệu...</span>
+                <span style="color:#cbd5e1;">|</span>
+                <span id="next-refresh-text">Tự động cập nhật sau 15:00</span>
+            </div>
         </div>
 
         <div class="team-stats-row"
@@ -706,7 +712,50 @@
             } finally {
                 const loader = document.getElementById('portal-loading');
                 if (loader) loader.classList.add('hidden');
+                updateLastRefreshTime();
             }
+        }
+
+        // --- Auto-refresh logic ---
+        const AUTO_REFRESH_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
+        let lastRefreshTime = null;
+        let countdownTimerId = null;
+
+        function updateLastRefreshTime() {
+            lastRefreshTime = new Date();
+            const el = document.getElementById('last-updated-text');
+            if (el) {
+                const hh = lastRefreshTime.getHours().toString().padStart(2, '0');
+                const mm = lastRefreshTime.getMinutes().toString().padStart(2, '0');
+                const ss = lastRefreshTime.getSeconds().toString().padStart(2, '0');
+                el.innerText = `Cập nhật lúc ${hh}:${mm}:${ss}`;
+            }
+            startCountdown();
+        }
+
+        function startCountdown() {
+            if (countdownTimerId) clearInterval(countdownTimerId);
+            const nextRefresh = new Date(lastRefreshTime.getTime() + AUTO_REFRESH_INTERVAL_MS);
+            countdownTimerId = setInterval(() => {
+                const now = new Date();
+                const diff = Math.max(0, nextRefresh - now);
+                const mins = Math.floor(diff / 60000);
+                const secs = Math.floor((diff % 60000) / 1000);
+                const el = document.getElementById('next-refresh-text');
+                if (el) {
+                    el.innerText = `Tự động cập nhật sau ${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+                }
+                if (diff <= 0) {
+                    clearInterval(countdownTimerId);
+                }
+            }, 1000);
+        }
+
+        function manualRefresh() {
+            const icon = document.querySelector('#auto-refresh-bar i');
+            if (icon) icon.style.transform = 'rotate(360deg)';
+            setTimeout(() => { if (icon) icon.style.transform = ''; }, 600);
+            runPortal();
         }
 
         let memberChartInstance = null;
@@ -1131,9 +1180,15 @@
             if (window.loadAllTaskMetaFromFirestore) {
                 await window.loadAllTaskMetaFromFirestore();
             }
-            loadTeamStats();
+            await loadTeamStats();
         }
         runPortal();
+
+        // Auto-refresh every 15 minutes
+        setInterval(() => {
+            console.log('[Auto-Refresh] Đang tự động cập nhật dữ liệu...');
+            runPortal();
+        }, AUTO_REFRESH_INTERVAL_MS);
     </script>
 </body>
 

@@ -815,6 +815,10 @@ window.updateDashboard = () => {
         if (isRevision) return false;
         if (!meta.startDate && !meta.endDate) return false;
 
+        // Ẩn task nếu assignee đã chuyển sang user khác
+        const isAssignee = t.assignees?.some(a => a.username === TARGET_USER);
+        if (!isAssignee) return false;
+
         if (meta.endDate) {
             const end = new Date(meta.endDate);
             end.setHours(0,0,0,0);
@@ -1030,6 +1034,59 @@ window.changePlannerWeek = (offset) => {
     renderPlanner();
 };
 
+// --- Auto-refresh logic for Dashboard ---
+const DASH_REFRESH_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
+let dashLastRefreshTime = null;
+let dashCountdownTimerId = null;
+
+function updateDashLastRefreshTime() {
+    dashLastRefreshTime = new Date();
+    const el = document.getElementById('dash-last-updated');
+    if (el) {
+        const hh = dashLastRefreshTime.getHours().toString().padStart(2, '0');
+        const mm = dashLastRefreshTime.getMinutes().toString().padStart(2, '0');
+        const ss = dashLastRefreshTime.getSeconds().toString().padStart(2, '0');
+        el.innerText = `Cập nhật lúc ${hh}:${mm}:${ss}`;
+    }
+    startDashCountdown();
+}
+
+function startDashCountdown() {
+    if (dashCountdownTimerId) clearInterval(dashCountdownTimerId);
+    const nextRefresh = new Date(dashLastRefreshTime.getTime() + DASH_REFRESH_INTERVAL_MS);
+    dashCountdownTimerId = setInterval(() => {
+        const now = new Date();
+        const diff = Math.max(0, nextRefresh - now);
+        const mins = Math.floor(diff / 60000);
+        const secs = Math.floor((diff % 60000) / 1000);
+        const el = document.getElementById('dash-next-refresh');
+        if (el) {
+            el.innerText = `Tự động cập nhật sau ${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+        }
+        if (diff <= 0) {
+            clearInterval(dashCountdownTimerId);
+        }
+    }, 1000);
+}
+
+async function loadDashboardData() {
+    // Reset label enrichment flag so it re-fetches on refresh
+    state.labelEventsEnriched = false;
+
+    await fetchTodayEvents();
+    await fetchCustomerTasks();
+    await fetchIssues();
+
+    updateDashLastRefreshTime();
+}
+
+window.manualDashboardRefresh = () => {
+    const icon = document.querySelector('#auto-refresh-bar i');
+    if (icon) icon.style.transform = 'rotate(360deg)';
+    setTimeout(() => { if (icon) icon.style.transform = ''; }, 600);
+    loadDashboardData();
+};
+
 document.addEventListener('DOMContentLoaded', async () => {
     // Initial static population in case fetch takes time
     const nameEl = document.getElementById('dashboard-user-name');
@@ -1039,7 +1096,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (window.loadAllTaskMetaFromFirestore) {
         await window.loadAllTaskMetaFromFirestore();
     }
-    fetchTodayEvents();
-    fetchCustomerTasks();
-    fetchIssues();
+
+    await loadDashboardData();
+
+    // Auto-refresh every 15 minutes
+    setInterval(() => {
+        console.log('[Auto-Refresh] Đang tự động cập nhật dữ liệu dashboard...');
+        loadDashboardData();
+    }, DASH_REFRESH_INTERVAL_MS);
 });
