@@ -140,6 +140,38 @@ window.updateInputField = (taskId, field, value) => {
     saveTaskMeta(taskId, meta);
 };
 
+// Translation cache and function
+const translationCache = {};
+
+const isVietnamese = (text) => {
+    // Check for Vietnamese-specific diacritical characters
+    const vnPattern = /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i;
+    return vnPattern.test(text);
+};
+
+const translateText = async (text) => {
+    if (!text || text.trim() === '') return '';
+    if (isVietnamese(text)) return '';
+    const cacheKey = text.trim();
+    if (translationCache[cacheKey]) return translationCache[cacheKey];
+    try {
+        const res = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=vi&dt=t&q=${encodeURIComponent(text)}`);
+        if (!res.ok) return '';
+        const data = await res.json();
+        let translated = '';
+        if (data && data[0]) {
+            data[0].forEach(part => {
+                if (part[0]) translated += part[0];
+            });
+        }
+        translationCache[cacheKey] = translated;
+        return translated;
+    } catch (e) {
+        console.error('Translation error:', e);
+        return '';
+    }
+};
+
 // Render Functions
 const renderTaskList = async (taskArray, tbodyId, emptyStateId, showProjectColumn = true) => {
     const tbody = document.getElementById(tbodyId);
@@ -246,6 +278,7 @@ const renderTaskList = async (taskArray, tbodyId, emptyStateId, showProjectColum
                     ${warningHTML}
                 </div>
                 <h3 class="task-title">${task.title}</h3>
+                ${(tbodyId === 'task-table-body' || tbodyId === 'dev-task-table-body') ? `<div class="task-title-vi" data-translate-id="translate-${task.id}" style="font-size: 12.5px; color: #6366f1; font-style: italic; margin-top: 2px; margin-bottom: 4px; line-height: 1.4;"><span style="font-weight: 600; color: #818cf8;">Dịch tiếng việt:</span> <span style="color: #94a3b8;">đang dịch...</span></div>` : ''}
                 <div class="task-tags">${tagsHTML}</div>
                 ${devHTML}
             </td>
@@ -258,6 +291,19 @@ const renderTaskList = async (taskArray, tbodyId, emptyStateId, showProjectColum
         `;
 
         tbody.appendChild(tr);
+
+        // Translate title asynchronously for Review/Revision and Dev tables
+        if (tbodyId === 'task-table-body' || tbodyId === 'dev-task-table-body') {
+            (async (taskId, title) => {
+                const translated = await translateText(title);
+                const el = document.querySelector(`[data-translate-id="translate-${taskId}"]`);
+                if (el && translated) {
+                    el.innerHTML = `<span style="font-weight: 600; color: #818cf8;">Dịch tiếng việt:</span> ${translated}`;
+                } else if (el) {
+                    el.innerHTML = `<span style="font-weight: 600; color: #818cf8;">Dịch tiếng việt:</span> <span style="color: #cbd5e1;">Không dịch được</span>`;
+                }
+            })(task.id, task.title);
+        }
     }
     
     lucide.createIcons();
@@ -696,6 +742,7 @@ const renderUnplannedBoard = (tasks) => {
                     <span style="font-size:10px; color:#64748b; margin-left:8px;">Tạo: ${formatDateVN(t.created_at)}</span>
                 </div>
                 <div style="font-weight: 500; font-size: 13px; color: #1e293b; margin-bottom: 4px; line-height: 1.4;">${t.title}</div>
+                ${!isVietnamese(t.title) ? `<div class="task-title-vi" data-translate-id="translate-unplanned-${t.id}" style="font-size: 12.5px; color: #6366f1; font-style: italic; margin-top: 2px; margin-bottom: 4px; line-height: 1.4;"><span style="font-weight: 600; color: #818cf8;">Dịch tiếng việt:</span> <span style="color: #94a3b8;">đang dịch...</span></div>` : ''}
             </td>
             <td class="col-plan">
                 <div class="plan-inputs">
@@ -715,6 +762,19 @@ const renderUnplannedBoard = (tasks) => {
             </td>
         `;
         tbody.appendChild(tr);
+
+        // Translate title asynchronously (skip if already Vietnamese)
+        if (!isVietnamese(t.title)) {
+            (async (taskId, title) => {
+                const translated = await translateText(title);
+                const el = document.querySelector(`[data-translate-id="translate-unplanned-${taskId}"]`);
+                if (el && translated) {
+                    el.innerHTML = `<span style="font-weight: 600; color: #818cf8;">Dịch tiếng việt:</span> ${translated}`;
+                } else if (el) {
+                    el.innerHTML = `<span style="font-weight: 600; color: #818cf8;">Dịch tiếng việt:</span> <span style="color: #cbd5e1;">Không dịch được</span>`;
+                }
+            })(t.id, t.title);
+        }
     });
 };
 
