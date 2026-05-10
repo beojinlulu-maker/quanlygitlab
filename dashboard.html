@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="vi">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,28 +8,38 @@
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@500;600;700&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@500;600;700&display=swap"
+        rel="stylesheet">
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
     <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
 
     <div class="app-container">
         <!-- Header -->
         <header class="main-header">
             <div class="header-title">
-                <a href="index.html" style="color: #64748b; margin-right: 15px; display: flex; align-items: center; text-decoration: none; transition: color 0.2s;" onmouseover="this.style.color='#4f46e5'" onmouseout="this.style.color='#64748b'" title="Trở về Portal">
+                <a href="index.html"
+                    style="color: #64748b; margin-right: 15px; display: flex; align-items: center; text-decoration: none; transition: color 0.2s;"
+                    onmouseover="this.style.color='#4f46e5'" onmouseout="this.style.color='#64748b'"
+                    title="Trở về Portal">
                     <i data-lucide="arrow-left" style="width: 24px; height: 24px;"></i>
                 </a>
                 <i data-lucide="database" class="icon-db"></i>
-                <h1>Dashboard Quản lý Task <span id="dashboard-user-name" style="margin-left: 8px; color: #a5b4fc;"></span><span id="loading-indicator" class="loading hidden"></span></h1>
+                <h1>Dashboard Quản lý Task <span id="dashboard-user-name"
+                        style="margin-left: 8px; color: #a5b4fc;"></span><span id="loading-indicator"
+                        class="loading hidden"></span></h1>
             </div>
         </header>
 
         <!-- Auto-refresh status bar -->
-        <div id="auto-refresh-bar" style="display:flex; align-items:center; justify-content:center; gap:10px; padding:8px 16px; background:#f1f5f9; border-bottom:1px solid #e2e8f0; font-size:12px; color:#64748b; font-weight:500;">
-            <i data-lucide="refresh-cw" style="width:13px; height:13px; cursor:pointer; transition:transform 0.3s;" onclick="manualDashboardRefresh()" title="Tải lại ngay"></i>
+        <div id="auto-refresh-bar"
+            style="display:flex; align-items:center; justify-content:center; gap:10px; padding:8px 16px; background:#f1f5f9; border-bottom:1px solid #e2e8f0; font-size:12px; color:#64748b; font-weight:500;">
+            <i data-lucide="refresh-cw" style="width:13px; height:13px; cursor:pointer; transition:transform 0.3s;"
+                onclick="manualDashboardRefresh()" title="Tải lại ngay"></i>
             <span id="dash-last-updated">Đang tải dữ liệu...</span>
             <span style="color:#cbd5e1;">|</span>
             <span id="dash-next-refresh">Tự động cập nhật sau 15:00</span>
@@ -36,7 +47,7 @@
 
         <!-- Main Content -->
         <main class="main-content">
-            
+
             <!-- Top Stats Box -->
             <div class="stats-row">
                 <div class="stat-card" style="border-left: 4px solid #3b82f6;">
@@ -53,15 +64,15 @@
                         <div class="stat-value" id="stat-interactions">0</div>
                     </div>
                 </div>
-                <div class="stat-card" style="border-left: 4px solid #6366f1;">
-                    <div class="stat-icon" style="color: #6366f1;"><i data-lucide="shield-check"></i></div>
+                <div class="stat-card" style="border-left: 4px solid #f43f5e;">
+                    <div class="stat-icon" style="color: #f43f5e;"><i data-lucide="shield-check"></i></div>
                     <div class="stat-info">
                         <div class="stat-title">REVIEW</div>
                         <div class="stat-value" id="stat-review-tasks">0</div>
                     </div>
                 </div>
-                <div class="stat-card" style="border-left: 4px solid #f43f5e;">
-                    <div class="stat-icon" style="color: #f43f5e;"><i data-lucide="wrench"></i></div>
+                <div class="stat-card" style="border-left: 4px solid #6366f1;">
+                    <div class="stat-icon" style="color: #6366f1;"><i data-lucide="wrench"></i></div>
                     <div class="stat-info">
                         <div class="stat-title">REVISION</div>
                         <div class="stat-value" id="stat-revision-tasks">0</div>
@@ -80,12 +91,14 @@
                         </div>
                     </div>
                     <div class="planner-nav">
-                        <button class="nav-btn" onclick="changePlannerWeek(-1)"><i data-lucide="chevron-left"></i></button>
+                        <button class="nav-btn" onclick="changePlannerWeek(-1)"><i
+                                data-lucide="chevron-left"></i></button>
                         <span id="week-range-label">--/--/---- - --/--/----</span>
-                        <button class="nav-btn" onclick="changePlannerWeek(1)"><i data-lucide="chevron-right"></i></button>
+                        <button class="nav-btn" onclick="changePlannerWeek(1)"><i
+                                data-lucide="chevron-right"></i></button>
                     </div>
                 </div>
-                
+
                 <div class="planner-body">
                     <!-- Left: Bar Chart -->
                     <div class="planner-chart">
@@ -97,7 +110,7 @@
                             <span>Chọn: <span id="selected-day-hours">0.0h</span></span>
                         </div>
                     </div>
-                    
+
                     <!-- Right: Task List -->
                     <div class="planner-task-list">
                         <div class="planner-task-header">
@@ -177,23 +190,34 @@
                     </div>
                 </div>
             </div>
-            
+
             <div style="margin-bottom: 40px;">
                 <div class="table-container" style="border: 1px solid #fda4af;">
-                    <div style="background-color: #be123c; padding: 16px 20px; color: white; display: flex; align-items: center; justify-content: space-between; font-weight: 700; font-family: 'Outfit', sans-serif; font-size: 16px;">
+                    <div
+                        style="background-color: #be123c; padding: 16px 20px; color: white; display: flex; align-items: center; justify-content: space-between; font-weight: 700; font-family: 'Outfit', sans-serif; font-size: 16px;">
                         <div style="display: flex; align-items: center; gap: 10px; text-transform: uppercase;">
-                            <i data-lucide="layout-template" style="color: white; width: 22px; height: 22px;"></i> TASK KHÁCH HÀNG CẦN XỬ LÝ
+                            <i data-lucide="layout-template" style="color: white; width: 22px; height: 22px;"></i> TASK
+                            KHÁCH HÀNG CẦN XỬ LÝ <span id="count-customer-tasks"
+                                style="background: rgba(255,255,255,0.25); padding: 2px 10px; border-radius: 100px; font-size: 13px;"></span>
+                            task
                         </div>
-                        <div style="background: rgba(255, 255, 255, 0.2); padding: 5px 14px; border-radius: 100px; font-size: 12px; font-weight: 600;">
+                        <div
+                            style="background: rgba(255, 255, 255, 0.2); padding: 5px 14px; border-radius: 100px; font-size: 12px; font-weight: 600;">
                             Dự án: AccountingCorpIFRS_Idea
                         </div>
                     </div>
                     <table class="task-table">
                         <thead style="background-color: #fff1f2;">
                             <tr>
-                                <th class="col-stt" style="background: transparent; color: #be123c; border-bottom: 2px solid #fda4af;">STT</th>
-                                <th class="col-task" style="background: transparent; color: #be123c; border-bottom: 2px solid #fda4af;">TASK / TITLE / TAGS</th>
-                                <th class="col-progress" style="background: transparent; color: #be123c; border-bottom: 2px solid #fda4af;">TIẾN ĐỘ TEST</th>
+                                <th class="col-stt"
+                                    style="background: transparent; color: #be123c; border-bottom: 2px solid #fda4af;">
+                                    STT</th>
+                                <th class="col-task"
+                                    style="background: transparent; color: #be123c; border-bottom: 2px solid #fda4af;">
+                                    TASK / TITLE / TAGS</th>
+                                <th class="col-progress"
+                                    style="background: transparent; color: #be123c; border-bottom: 2px solid #fda4af;">
+                                    TIẾN ĐỘ TEST</th>
                             </tr>
                         </thead>
                         <tbody id="customer-task-table-body">
@@ -209,8 +233,12 @@
 
             <div style="margin-top: 40px; margin-bottom: 0;">
                 <div class="table-container" style="border: 1px solid #334155;">
-                    <div style="background-color: #1e293b; padding: 16px 20px; color: white; display: flex; align-items: center; gap: 10px; font-weight: 700; font-family: 'Outfit', sans-serif; font-size: 16px; text-transform: uppercase;">
-                        <i data-lucide="shield-check" style="color: white; width: 22px; height: 22px;"></i> Danh sách task Review/Revision
+                    <div
+                        style="background-color: #1e293b; padding: 16px 20px; color: white; display: flex; align-items: center; gap: 10px; font-weight: 700; font-family: 'Outfit', sans-serif; font-size: 16px; text-transform: uppercase;">
+                        <i data-lucide="shield-check" style="color: white; width: 22px; height: 22px;"></i> Danh sách
+                        task Review/Revision <span id="count-review-tasks"
+                            style="background: rgba(255,255,255,0.2); padding: 2px 10px; border-radius: 100px; font-size: 13px;"></span>
+                        task
                     </div>
                     <table class="task-table">
                         <thead>
@@ -234,8 +262,12 @@
 
             <div style="margin-top: 40px; margin-bottom: 30px;">
                 <div class="table-container">
-                    <div style="background-color: var(--accent-indigo); padding: 16px 20px; color: white; display: flex; align-items: center; gap: 10px; font-weight: 600; font-family: 'Outfit', sans-serif; font-size: 16px;">
-                        <i data-lucide="database" style="color: white; width: 20px; height: 20px;"></i> Danh sách task dev chưa xử lý
+                    <div
+                        style="background-color: var(--accent-indigo); padding: 16px 20px; color: white; display: flex; align-items: center; gap: 10px; font-weight: 600; font-family: 'Outfit', sans-serif; font-size: 16px;">
+                        <i data-lucide="database" style="color: white; width: 20px; height: 20px;"></i> Danh sách task
+                        dev chưa xử lý <span id="count-dev-tasks"
+                            style="background: rgba(255,255,255,0.2); padding: 2px 10px; border-radius: 100px; font-size: 13px; text-transform: uppercase;"></span>
+                        task
                     </div>
                     <table class="task-table">
                         <thead>
@@ -266,4 +298,5 @@
     <script src="firebase-config.js"></script>
     <script src="app.js"></script>
 </body>
+
 </html>

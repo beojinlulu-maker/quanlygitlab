@@ -360,6 +360,8 @@ const fetchIssues = async () => {
         devTasks.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
         state.devTasks = devTasks;
         await renderTaskList(state.devTasks, 'dev-task-table-body', 'dev-empty-state');
+        const devCountEl = document.getElementById('count-dev-tasks');
+        if (devCountEl) devCountEl.innerText = `(${state.devTasks.length})`;
 
         // Filter and enrich cho View/Revision tasks
         const enriched = await Promise.all(allIssues.map(async (issue) => {
@@ -430,6 +432,8 @@ const fetchIssues = async () => {
 
         state.tasks = finalTasks;
         await renderTaskList(state.tasks, 'task-table-body', 'empty-state');
+        const reviewCountEl = document.getElementById('count-review-tasks');
+        if (reviewCountEl) reviewCountEl.innerText = `(${state.tasks.length})`;
         if (window.updateDashboard) { updateDashboard(); }
 
     } catch (err) {
@@ -471,10 +475,9 @@ const fetchCustomerTasks = async () => {
         const labels = (issue.labels || []).map(l => l.toLowerCase());
         if (labels.includes('done')) return null;
 
-        const isAuthor = issue.author?.username === TARGET_USER;
         const isAssignee = issue.assignees?.some(a => a.username === TARGET_USER);
 
-        if (!isAuthor && !isAssignee) return null;
+        if (!isAssignee) return null;
 
         let hasGitlabLink = false;
         try {
@@ -500,6 +503,8 @@ const fetchCustomerTasks = async () => {
     
     state.customerTasks = finalCustomerTasks;
     await renderTaskList(state.customerTasks, 'customer-task-table-body', 'customer-empty-state', false);
+    const customerCountEl = document.getElementById('count-customer-tasks');
+    if (customerCountEl) customerCountEl.innerText = `(${state.customerTasks.length})`;
     if (window.updateDashboard) { updateDashboard(); }
 };
 

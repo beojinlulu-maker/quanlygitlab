@@ -190,8 +190,10 @@
                     style="width: 20px; height: 20px; border: 3px solid #e2e8f0; border-top-color: #4f46e5; border-radius: 50%; animation: spin 1s linear infinite;"></span>
             </h1>
             <p>Chọn thành viên để xem công việc chi tiết trên GitLab</p>
-            <div id="auto-refresh-bar" style="display:inline-flex; align-items:center; gap:8px; margin-top:12px; background:#f1f5f9; padding:6px 16px; border-radius:100px; font-size:12px; color:#64748b; font-weight:500; transition:all 0.3s;">
-                <i data-lucide="refresh-cw" style="width:13px; height:13px; cursor:pointer; transition:transform 0.3s;" onclick="manualRefresh()" title="Tải lại ngay"></i>
+            <div id="auto-refresh-bar"
+                style="display:inline-flex; align-items:center; gap:8px; margin-top:12px; background:#f1f5f9; padding:6px 16px; border-radius:100px; font-size:12px; color:#64748b; font-weight:500; transition:all 0.3s;">
+                <i data-lucide="refresh-cw" style="width:13px; height:13px; cursor:pointer; transition:transform 0.3s;"
+                    onclick="manualRefresh()" title="Tải lại ngay"></i>
                 <span id="last-updated-text">Đang tải dữ liệu...</span>
                 <span style="color:#cbd5e1;">|</span>
                 <span id="next-refresh-text">Tự động cập nhật sau 15:00</span>
@@ -796,13 +798,13 @@
                         {
                             label: 'Tổng task review',
                             data: dataReview,
-                            backgroundColor: '#a0e3f2',
+                            backgroundColor: '#f25ea3',
                             borderRadius: 4
                         },
                         {
                             label: 'Tổng task revision',
                             data: dataRevision,
-                            backgroundColor: '#f25ea3',
+                            backgroundColor: '#a0e3f2',
                             borderRadius: 4
                         },
                         {
