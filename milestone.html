@@ -913,10 +913,10 @@
 
                 <!-- 3.2 Status Cards -->
                 <div class="ms-status-grid">
-                    <div class="ms-status-card" style="border-left: 4px solid #ef4444;" onclick="showStatusTasks('not_started')">
-                        <span class="emoji">🔴</span>
-                        <div class="title">CHƯA BẮT ĐẦU</div>
-                        <div class="count" id="stat-not-started">0</div>
+                    <div class="ms-status-card" style="border-left: 4px solid #a855f7;" onclick="showStatusTasks('bugs')">
+                        <span class="emoji">🐛</span>
+                        <div class="title">BUG CHƯA FIX</div>
+                        <div class="count" id="stat-bugs-ms">0</div>
                     </div>
                     <div class="ms-status-card" style="border-left: 4px solid #f59e0b;" onclick="showStatusTasks('in_progress')">
                         <span class="emoji">🟡</span>
@@ -937,50 +937,6 @@
                         <span class="emoji">🟢</span>
                         <div class="title">HOÀN THÀNH</div>
                         <div class="count" id="stat-done-ms">0</div>
-                    </div>
-                </div>
-
-                <!-- 3.3 Risk Alerts -->
-                <div class="ms-alert-grid">
-                    <div class="ms-alert-card alert-red" id="alert-overdue" onclick="toggleAlertList('overdue')">
-                        <div class="ms-alert-card-header">
-                            <span class="emoji">🔥</span>
-                            <span class="title">TASK TRỄ HẠN</span>
-                        </div>
-                        <div class="alert-count"><span id="alert-overdue-count">0</span></div>
-                        <div id="alert-overdue-list" class="alert-list" style="display:none"></div>
-                    </div>
-                    <div class="ms-alert-card alert-amber" id="alert-unassigned" onclick="toggleAlertList('unassigned')">
-                        <div class="ms-alert-card-header">
-                            <span class="emoji">⚠️</span>
-                            <span class="title">CHƯA GÁN NGƯỜI</span>
-                        </div>
-                        <div class="alert-count"><span id="alert-unassigned-count">0</span></div>
-                        <div id="alert-unassigned-list" class="alert-list" style="display:none"></div>
-                    </div>
-                    <div class="ms-alert-card alert-purple" id="alert-bugs" onclick="toggleAlertList('bugs')">
-                        <div class="ms-alert-card-header">
-                            <span class="emoji">🐛</span>
-                            <span class="title">BUG CHƯA FIX</span>
-                        </div>
-                        <div class="alert-count"><span id="alert-bugs-count">0</span></div>
-                        <div id="alert-bugs-list" class="alert-list" style="display:none"></div>
-                    </div>
-                    <div class="ms-alert-card alert-blue" id="alert-unplanned" onclick="toggleAlertList('unplanned')">
-                        <div class="ms-alert-card-header">
-                            <span class="emoji">📅</span>
-                            <span class="title">CHƯA LẬP KẾ HOẠCH</span>
-                        </div>
-                        <div class="alert-count"><span id="alert-unplanned-count">0</span></div>
-                        <div id="alert-unplanned-list" class="alert-list" style="display:none"></div>
-                    </div>
-                    <div class="ms-alert-card alert-pink" id="alert-multi-revision" onclick="toggleAlertList('multi-revision')">
-                        <div class="ms-alert-card-header">
-                            <span class="emoji">🔁</span>
-                            <span class="title">REVISION ≥ 2 LẦN</span>
-                        </div>
-                        <div class="alert-count"><span id="alert-multi-revision-count">0</span></div>
-                        <div id="alert-multi-revision-list" class="alert-list" style="display:none"></div>
                     </div>
                 </div>
 

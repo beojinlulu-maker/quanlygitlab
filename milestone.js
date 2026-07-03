@@ -678,7 +678,6 @@ function renderMilestoneOverview() {
     if (!msState.currentMilestone) return;
     renderOverviewHeader();
     renderStatusCards();
-    renderRiskAlerts();
     renderMemberStats();
     renderMsTaskTable();
     renderBurndownChart();
@@ -740,88 +739,28 @@ function renderOverviewHeader() {
 // --- 3.2 Status Cards ---
 function renderStatusCards() {
     const tasks = getMilestoneTasks();
-    const counts = { not_started: 0, in_progress: 0, review: 0, revision: 0, done: 0 };
+    const counts = { bugs: 0, in_progress: 0, review: 0, revision: 0, done: 0 };
 
     tasks.forEach(t => {
         const status = getTaskStatus(t);
-        if (counts[status] !== undefined) counts[status]++;
+        if (status !== 'not_started' && counts[status] !== undefined) counts[status]++;
+        
+        // Count bugs (not done)
+        if (status !== 'done') {
+            const labels = (t.labels || []).map(l => l.toLowerCase());
+            if (labels.some(l => l === 'bug' || l === 'bugs')) {
+                counts.bugs++;
+            }
+        }
     });
 
-    document.getElementById('stat-not-started').textContent = counts.not_started;
+    const bugEl = document.getElementById('stat-bugs-ms');
+    if (bugEl) bugEl.textContent = counts.bugs;
+    
     document.getElementById('stat-in-progress').textContent = counts.in_progress;
     document.getElementById('stat-review-ms').textContent = counts.review;
     document.getElementById('stat-revision-ms').textContent = counts.revision;
     document.getElementById('stat-done-ms').textContent = counts.done;
-}
-
-// --- 3.3 Risk Alerts ---
-function renderRiskAlerts() {
-    const tasks = getMilestoneTasks();
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    const alerts = {
-        overdue: [],
-        unassigned: [],
-        bugs: [],
-        unplanned: [],
-        'multi-revision': []
-    };
-
-    tasks.forEach(t => {
-        const status = getTaskStatus(t);
-        const meta = loadTaskMeta(t.id);
-        const labels = (t.labels || []).map(l => l.toLowerCase());
-
-        // Overdue: task meta endDate < today AND not done
-        if (status !== 'done' && meta.endDate) {
-            const end = new Date(meta.endDate);
-            end.setHours(0, 0, 0, 0);
-            if (end < today) alerts.overdue.push(t);
-        }
-
-        // Unassigned
-        if (!t.assignees || t.assignees.length === 0) {
-            alerts.unassigned.push(t);
-        }
-
-        // Bugs: has label 'Bug' and not done
-        if (status !== 'done' && labels.some(l => l === 'bug')) {
-            alerts.bugs.push(t);
-        }
-
-        // Unplanned: no start/end date in taskMeta
-        if (!meta.startDate && !meta.endDate) {
-            alerts.unplanned.push(t);
-        }
-
-        // Multi-revision: currentRound >= 3
-        if (meta.currentRound >= 3) {
-            alerts['multi-revision'].push(t);
-        }
-    });
-
-    // Render each alert
-    Object.entries(alerts).forEach(([key, taskList]) => {
-        const countEl = document.getElementById(`alert-${key}-count`);
-        const listEl = document.getElementById(`alert-${key}-list`);
-
-        if (countEl) countEl.textContent = taskList.length;
-        if (listEl) {
-            listEl.innerHTML = taskList.map(t => {
-                const url = t.web_url || '#';
-                return `<a href="${url}" target="_blank">#${t.iid || t.id} — ${t.title}</a>`;
-            }).join('');
-        }
-    });
-}
-
-/** Toggle alert list visibility */
-function toggleAlertList(alertKey) {
-    const listEl = document.getElementById(`alert-${alertKey}-list`);
-    if (listEl) {
-        listEl.style.display = listEl.style.display === 'none' ? 'block' : 'none';
-    }
 }
 
 // --- 3.4 Charts ---
@@ -1167,7 +1106,15 @@ function showStatusTasks(status) {
         const task = tasks[index];
         const taskStatus = getTaskStatus(task);
 
-        if (taskStatus === status) {
+        let isMatch = false;
+        if (status === 'bugs') {
+            const labels = (task.labels || []).map(l => l.toLowerCase());
+            isMatch = taskStatus !== 'done' && labels.some(l => l === 'bug' || l === 'bugs');
+        } else {
+            isMatch = taskStatus === status;
+        }
+
+        if (isMatch) {
             row.style.background = '#fffbeb';
             row.style.transition = 'background 0.3s ease';
             setTimeout(() => {
