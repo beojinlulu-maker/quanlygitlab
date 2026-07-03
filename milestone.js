@@ -444,12 +444,31 @@ function renderUnassignedTasks() {
 
     const assignedIds = getAllAssignedTaskIds();
 
-    // Filter: only opened tasks not in any milestone, and not labeled 'Done'
+    const ms = msState.currentMilestone ? msState.milestones[msState.currentMilestone] : null;
+    let msStart = 0;
+    let msEnd = Infinity;
+    if (ms) {
+        msStart = new Date(ms.startDate).setHours(0, 0, 0, 0);
+        msEnd = new Date(ms.endDate).setHours(23, 59, 59, 999);
+    }
+
+    // Filter: tasks not in any milestone
     let unassigned = msState.allTasks.filter(t => {
-        if (t.state !== 'opened') return false;
         if (assignedIds.has(String(t.id))) return false;
+        
         const labels = (t.labels || []).map(l => l.toLowerCase());
-        if (labels.includes('done')) return false;
+        const isDone = t.state === 'closed' || labels.includes('done');
+        
+        if (isDone) {
+            // Only show done tasks if a milestone is selected and task was completed within the milestone timeframe
+            if (!ms) return false;
+            const taskDateStr = t.closed_at || t.updated_at || t.created_at;
+            const taskTime = new Date(taskDateStr).getTime();
+            
+            return taskTime >= msStart && taskTime <= msEnd;
+        }
+        
+        // Show all open tasks
         return true;
     });
 
