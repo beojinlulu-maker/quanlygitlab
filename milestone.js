@@ -33,6 +33,7 @@ const msState = {
     milestones: {},         // { msId: { name, startDate, endDate, taskIds: [] } }
     currentMilestone: null, // currently selected milestone ID
     selectedTaskIds: new Set(),     // checkboxes for unassigned table
+    selectedDoneTaskIds: new Set(), // checkboxes for done unassigned table
     selectedMsTaskIds: new Set(),   // checkboxes for milestone task table
     charts: { burndown: null, pie: null, bar: null }
 };
@@ -299,6 +300,8 @@ function selectMilestone(msId) {
     if (!msId) {
         msState.currentMilestone = null;
         document.getElementById('ms-overview').style.display = 'none';
+        const donePanel = document.getElementById('done-unassigned-panel');
+        if(donePanel) donePanel.style.display = 'none';
         document.getElementById('btn-delete-ms').style.display = 'none';
         updateAddButtonState();
         return;
@@ -316,9 +319,14 @@ function selectMilestone(msId) {
 
     // Show overview
     document.getElementById('ms-overview').style.display = 'block';
+    const donePanel = document.getElementById('done-unassigned-panel');
+    if(donePanel) donePanel.style.display = 'block';
+    
     renderMilestoneOverview();
     renderUnassignedTasks();
+    if(typeof renderDoneUnassignedTasks === 'function') renderDoneUnassignedTasks();
     updateAddButtonState();
+    if(typeof updateAddDoneButtonState === 'function') updateAddDoneButtonState();
 }
 
 // ============================================================
@@ -345,8 +353,35 @@ async function addSelectedToMilestone() {
     document.getElementById('select-all-checkbox').checked = false;
 
     renderUnassignedTasks();
+    if(typeof renderDoneUnassignedTasks === 'function') renderDoneUnassignedTasks();
     renderMilestoneOverview();
     updateAddButtonState();
+}
+
+async function addSelectedDoneToMilestone() {
+    if (!msState.currentMilestone || msState.selectedDoneTaskIds.size === 0) return;
+
+    const ms = msState.milestones[msState.currentMilestone];
+    if (!ms) return;
+
+    const taskIds = ms.taskIds || [];
+    msState.selectedDoneTaskIds.forEach(id => {
+        if (!taskIds.includes(String(id))) {
+            taskIds.push(String(id));
+        }
+    });
+
+    ms.taskIds = taskIds;
+    await saveMilestoneToFirestore(msState.currentMilestone, ms);
+
+    msState.selectedDoneTaskIds.clear();
+    const selectAllCb = document.getElementById('done-unassigned-select-all');
+    if (selectAllCb) selectAllCb.checked = false;
+
+    renderUnassignedTasks();
+    if(typeof renderDoneUnassignedTasks === 'function') renderDoneUnassignedTasks();
+    renderMilestoneOverview();
+    if(typeof updateAddDoneButtonState === 'function') updateAddDoneButtonState();
 }
 
 async function removeSelectedFromMilestone() {
@@ -363,6 +398,7 @@ async function removeSelectedFromMilestone() {
     if (selectAllMs) selectAllMs.checked = false;
 
     renderUnassignedTasks();
+    if(typeof renderDoneUnassignedTasks === 'function') renderDoneUnassignedTasks();
     renderMilestoneOverview();
     updateRemoveButtonState();
 }
@@ -384,6 +420,21 @@ function toggleSelectAll(e) {
         }
     });
     updateAddButtonState();
+}
+
+function toggleDoneSelectAll(e) {
+    const checked = e.target.checked;
+    const checkboxes = document.querySelectorAll('#done-unassigned-tbody input[type="checkbox"]');
+    checkboxes.forEach(cb => {
+        cb.checked = checked;
+        const taskId = cb.dataset.taskId;
+        if (checked) {
+            msState.selectedDoneTaskIds.add(taskId);
+        } else {
+            msState.selectedDoneTaskIds.delete(taskId);
+        }
+    });
+    if(typeof updateAddDoneButtonState === 'function') updateAddDoneButtonState();
 }
 
 function toggleSelectAllMs(e) {
@@ -411,6 +462,16 @@ function onUnassignedCheckboxChange(e) {
     updateAddButtonState();
 }
 
+function onDoneUnassignedCheckboxChange(e) {
+    const taskId = e.target.dataset.taskId;
+    if (e.target.checked) {
+        msState.selectedDoneTaskIds.add(taskId);
+    } else {
+        msState.selectedDoneTaskIds.delete(taskId);
+    }
+    if(typeof updateAddDoneButtonState === 'function') updateAddDoneButtonState();
+}
+
 function onMsCheckboxChange(e) {
     const taskId = e.target.dataset.taskId;
     if (e.target.checked) {
@@ -424,6 +485,11 @@ function onMsCheckboxChange(e) {
 function updateAddButtonState() {
     const btn = document.getElementById('btn-add-to-ms');
     btn.disabled = !msState.currentMilestone || msState.selectedTaskIds.size === 0;
+}
+
+function updateAddDoneButtonState() {
+    const btn = document.getElementById('btn-add-done-to-ms');
+    if (btn) btn.disabled = !msState.currentMilestone || msState.selectedDoneTaskIds.size === 0;
 }
 
 function updateRemoveButtonState() {
@@ -444,31 +510,12 @@ function renderUnassignedTasks() {
 
     const assignedIds = getAllAssignedTaskIds();
 
-    const ms = msState.currentMilestone ? msState.milestones[msState.currentMilestone] : null;
-    let msStart = 0;
-    let msEnd = Infinity;
-    if (ms) {
-        msStart = new Date(ms.startDate).setHours(0, 0, 0, 0);
-        msEnd = new Date(ms.endDate).setHours(23, 59, 59, 999);
-    }
-
-    // Filter: tasks not in any milestone
+    // Filter: only opened tasks not in any milestone, and not labeled 'Done'
     let unassigned = msState.allTasks.filter(t => {
+        if (t.state !== 'opened') return false;
         if (assignedIds.has(String(t.id))) return false;
-        
         const labels = (t.labels || []).map(l => l.toLowerCase());
-        const isDone = t.state === 'closed' || labels.includes('done');
-        
-        if (isDone) {
-            // Only show done tasks if a milestone is selected and task was completed within the milestone timeframe
-            if (!ms) return false;
-            const taskDateStr = t.closed_at || t.updated_at || t.created_at;
-            const taskTime = new Date(taskDateStr).getTime();
-            
-            return taskTime >= msStart && taskTime <= msEnd;
-        }
-        
-        // Show all open tasks
+        if (labels.includes('done')) return false;
         return true;
     });
 
@@ -514,19 +561,10 @@ function renderUnassignedTasks() {
 
         const webUrl = task.web_url || `https://gitlab.com/projects/${PROJECT_ID}/issues/${task.iid}`;
 
-        // Check if task is done/closed
-        const labels = (task.labels || []).map(l => l.toLowerCase());
-        const isDone = task.state === 'closed' || labels.includes('done');
-        const statusBadge = isDone
-            ? '<span style="background:#dcfce7;color:#059669;font-size:9px;font-weight:800;padding:2px 8px;border-radius:100px;border:1px solid #bbf7d0;text-transform:uppercase;margin-left:6px;">✓ DONE</span>'
-            : '';
-
-        if (isDone) tr.style.background = '#f0fdf4';
-
         tr.innerHTML = `
             <td style="text-align:center;"><input type="checkbox" data-task-id="${taskId}" ${isChecked ? 'checked' : ''}></td>
             <td class="cell-stt"><a href="${webUrl}" target="_blank" class="ms-task-link">#${task.iid || task.id}</a></td>
-            <td style="font-size:13px;font-weight:500;color:#1e293b;line-height:1.5;">${task.title || ''}${statusBadge}</td>
+            <td style="font-size:13px;font-weight:500;color:#1e293b;line-height:1.5;">${task.title || ''}</td>
             <td>${assigneesHtml}</td>
             <td>${labelsHtml}</td>
             <td class="ms-date-cell">${formatDateVN(task.created_at)}</td>
@@ -541,6 +579,96 @@ function renderUnassignedTasks() {
 
     lucide.createIcons();
 }
+
+function renderDoneUnassignedTasks() {
+    const tbody = document.getElementById('done-unassigned-tbody');
+    const emptyState = document.getElementById('done-unassigned-empty');
+    const countEl = document.getElementById('done-unassigned-count');
+    
+    if (!tbody || !emptyState || !countEl) return;
+
+    const ms = msState.currentMilestone ? msState.milestones[msState.currentMilestone] : null;
+    
+    if (!ms) {
+        tbody.innerHTML = '';
+        emptyState.classList.remove('hidden');
+        countEl.textContent = '0';
+        return;
+    }
+    
+    let msStart = new Date(ms.startDate).setHours(0, 0, 0, 0);
+    let msEnd = new Date(ms.endDate).setHours(23, 59, 59, 999);
+    
+    const assignedIds = getAllAssignedTaskIds();
+
+    let doneUnassigned = msState.allTasks.filter(t => {
+        if (assignedIds.has(String(t.id))) return false;
+        
+        const labels = (t.labels || []).map(l => l.toLowerCase());
+        const isDone = t.state === 'closed' || labels.includes('done');
+        
+        if (isDone) {
+            const taskDateStr = t.closed_at || t.updated_at || t.created_at;
+            const taskTime = new Date(taskDateStr).getTime();
+            return taskTime >= msStart && taskTime <= msEnd;
+        }
+        
+        return false;
+    });
+
+    countEl.textContent = doneUnassigned.length;
+
+    if (doneUnassigned.length === 0) {
+        tbody.innerHTML = '';
+        emptyState.classList.remove('hidden');
+        return;
+    }
+
+    emptyState.classList.add('hidden');
+    tbody.innerHTML = '';
+
+    doneUnassigned.forEach(task => {
+        const tr = document.createElement('tr');
+        const taskId = String(task.id);
+        const isChecked = msState.selectedDoneTaskIds.has(taskId);
+
+        const assigneesHtml = (task.assignees || [])
+            .map(a => `<span class="ms-assignee-badge">${TEAM_NAMES[a.username] || a.username || a.name}</span>`)
+            .join('') || '<span style="color:#94a3b8;font-size:11px;">—</span>';
+
+        const labelsHtml = (task.labels || [])
+            .map(l => {
+                let cls = 'ms-label-badge';
+                if (l.toLowerCase().includes('revision')) cls += ' revision';
+                else if (l.toLowerCase().includes('bug')) cls += ' bug';
+                else if (l.toLowerCase().includes('done')) cls += ' done';
+                return `<span class="${cls}">${l}</span>`;
+            })
+            .join('') || '<span style="color:#94a3b8;font-size:11px;">—</span>';
+
+        const webUrl = task.web_url || `https://gitlab.com/projects/${PROJECT_ID}/issues/${task.iid}`;
+        const statusBadge = '<span style="background:#dcfce7;color:#059669;font-size:9px;font-weight:800;padding:2px 8px;border-radius:100px;border:1px solid #bbf7d0;text-transform:uppercase;margin-left:6px;">✓ DONE</span>';
+        
+        tr.style.background = '#f0fdf4';
+        
+        tr.innerHTML = `
+            <td style="text-align:center;"><input type="checkbox" data-task-id="${taskId}" ${isChecked ? 'checked' : ''}></td>
+            <td class="cell-stt"><a href="${webUrl}" target="_blank" class="ms-task-link">#${task.iid || task.id}</a></td>
+            <td style="font-size:13px;font-weight:500;color:#1e293b;line-height:1.5;">${task.title || ''}${statusBadge}</td>
+            <td>${assigneesHtml}</td>
+            <td>${labelsHtml}</td>
+            <td class="ms-date-cell">${formatDateVN(task.created_at)}</td>
+        `;
+
+        const cb = tr.querySelector('input[type="checkbox"]');
+        cb.addEventListener('change', onDoneUnassignedCheckboxChange);
+
+        tbody.appendChild(tr);
+    });
+
+    lucide.createIcons();
+}
+
 
 // ============================================================
 // RENDER: MILESTONE OVERVIEW
@@ -1094,6 +1222,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     document.getElementById('select-all-checkbox').addEventListener('change', toggleSelectAll);
+
+    const selectAllDone = document.getElementById('done-unassigned-select-all');
+    if (selectAllDone) selectAllDone.addEventListener('change', toggleDoneSelectAll);
+
+    const btnAddDone = document.getElementById('btn-add-done-to-ms');
+    if (btnAddDone) btnAddDone.addEventListener('click', addSelectedDoneToMilestone);
 
     const selectAllMs = document.getElementById('select-all-ms-checkbox');
     if (selectAllMs) selectAllMs.addEventListener('change', toggleSelectAllMs);

@@ -1024,6 +1024,44 @@
                     </table>
                 </div>
 
+                <!-- 3.5.5 Done Tasks Not in Milestone -->
+                <div class="ms-task-panel" id="done-unassigned-panel" style="display:none; margin-bottom: 24px;">
+                    <div class="ms-task-panel-header" style="background: linear-gradient(90deg, #064e3b 0%, #065f46 100%); border-bottom: 1px solid #047857;">
+                        <div class="ms-task-panel-header-left">
+                            <i data-lucide="check-circle" style="width:20px;height:20px; color: #34d399;"></i>
+                            <span style="color: white;">DANH SÁCH TASK DONE CHƯA NẰM TRONG MILESTONE</span>
+                            <span id="done-unassigned-count" class="count-badge" style="background: rgba(255,255,255,0.2); color: white;">0</span>
+                        </div>
+                        <button id="btn-add-done-to-ms" class="btn-primary" style="background: #10b981; border-color: #059669;" disabled>
+                            <i data-lucide="plus-circle" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i>
+                            Thêm vào Milestone
+                        </button>
+                    </div>
+                    <div class="ms-table-container">
+                        <table class="ms-table">
+                            <thead>
+                                <tr>
+                                    <th style="width:40px; text-align:center;">
+                                        <input type="checkbox" id="done-unassigned-select-all">
+                                    </th>
+                                    <th class="col-stt">ID</th>
+                                    <th>TASK / TITLE</th>
+                                    <th style="width:140px;">ASSIGNEE</th>
+                                    <th style="width:120px;">LABELS</th>
+                                    <th style="width:100px;">NGÀY TẠO</th>
+                                </tr>
+                            </thead>
+                            <tbody id="done-unassigned-tbody">
+                                <!-- Populated by JS -->
+                            </tbody>
+                        </table>
+                        <div id="done-unassigned-empty" class="empty-state hidden">
+                            <i data-lucide="inbox" style="width:48px;height:48px;color:#cbd5e1;margin-bottom:12px;"></i>
+                            <p style="margin:0;color:#64748b;font-weight:500;">Không có task done nào bị sót trong khoảng thời gian này.</p>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- 3.6 Tasks in Milestone -->
                 <div class="ms-task-panel">
                     <div class="ms-task-panel-header">
