@@ -57,7 +57,10 @@ const formatDateVN = (dateStr) => {
     }
 };
 
-const loadTaskMeta = (taskId) => {
+const loadTaskMeta = (taskId, taskObj = null) => {
+    if (taskObj && taskObj._meta) {
+        return taskObj._meta;
+    }
     if (window.taskMetaMap && window.taskMetaMap[taskId]) {
         return window.taskMetaMap[taskId];
     }
@@ -296,13 +299,59 @@ async function deleteMilestone(msId) {
     renderUnassignedTasks();
 }
 
+async function closeMilestone(msId) {
+    if (!msId) return;
+    const ms = msState.milestones[msId];
+    if (!ms || ms.status === 'closed') return;
+
+    if (!confirm('Bạn có chắc muốn kết thúc Milestone này? Dữ liệu hiện tại sẽ được đóng băng và bạn không thể thay đổi danh sách task được nữa.')) return;
+
+    const tasks = getMilestoneTasks();
+    const frozenTasks = tasks.map(t => ({
+        id: t.id,
+        iid: t.iid,
+        title: t.title,
+        state: t.state,
+        labels: t.labels || [],
+        assignees: t.assignees ? t.assignees.map(a => ({ username: a.username, name: a.name })) : [],
+        author: t.author ? { username: t.author.username, name: t.author.name } : null,
+        created_at: t.created_at,
+        closed_at: t.closed_at,
+        web_url: t.web_url,
+        _meta: loadTaskMeta(t.id)
+    }));
+
+    const frozenData = {
+        tasks: frozenTasks,
+        closedAt: new Date().toISOString()
+    };
+
+    try {
+        const msRef = window.db.collection('milestones').doc(msId);
+        await msRef.update({
+            status: 'closed',
+            frozenData: frozenData
+        });
+        
+        ms.status = 'closed';
+        ms.frozenData = frozenData;
+        
+        selectMilestone(msId);
+    } catch (error) {
+        console.error("Error closing milestone: ", error);
+        alert("Lỗi khi kết thúc Milestone!");
+    }
+}
+
 function selectMilestone(msId) {
     if (!msId) {
         msState.currentMilestone = null;
         document.getElementById('ms-overview').style.display = 'none';
+        document.getElementById('unassigned-panel').style.display = 'none';
         const donePanel = document.getElementById('done-unassigned-panel');
         if(donePanel) donePanel.style.display = 'none';
         document.getElementById('btn-delete-ms').style.display = 'none';
+        document.getElementById('btn-close-ms').style.display = 'none';
         updateAddButtonState();
         return;
     }
@@ -319,14 +368,38 @@ function selectMilestone(msId) {
 
     // Show overview
     document.getElementById('ms-overview').style.display = 'block';
-    const donePanel = document.getElementById('done-unassigned-panel');
-    if(donePanel) donePanel.style.display = 'block';
+
+    const statusBadge = document.getElementById('ms-status-badge');
+    const isClosed = ms.status === 'closed';
+
+    if (isClosed) {
+        statusBadge.textContent = 'ĐÃ KẾT THÚC';
+        statusBadge.style.display = 'inline-block';
+        document.getElementById('btn-close-ms').style.display = 'none';
+        document.getElementById('unassigned-panel').style.display = 'none';
+        const donePanel = document.getElementById('done-unassigned-panel');
+        if(donePanel) donePanel.style.display = 'none';
+        
+        const btnRemove = document.getElementById('btn-remove-from-ms');
+        if (btnRemove) btnRemove.disabled = true;
+    } else {
+        statusBadge.textContent = 'ĐANG MỞ';
+        statusBadge.style.display = 'inline-block';
+        document.getElementById('btn-close-ms').style.display = 'inline-flex';
+        document.getElementById('unassigned-panel').style.display = 'block';
+        const donePanel = document.getElementById('done-unassigned-panel');
+        if(donePanel) donePanel.style.display = 'block';
+        
+        renderUnassignedTasks();
+        if(typeof renderDoneUnassignedTasks === 'function') renderDoneUnassignedTasks();
+        updateAddButtonState();
+        if(typeof updateAddDoneButtonState === 'function') updateAddDoneButtonState();
+        
+        // Let updateRemoveButtonState handle btn-remove-from-ms disabled status based on selections
+        updateRemoveButtonState();
+    }
     
     renderMilestoneOverview();
-    renderUnassignedTasks();
-    if(typeof renderDoneUnassignedTasks === 'function') renderDoneUnassignedTasks();
-    updateAddButtonState();
-    if(typeof updateAddDoneButtonState === 'function') updateAddDoneButtonState();
 }
 
 // ============================================================
@@ -688,7 +761,11 @@ function renderMilestoneOverview() {
 
 function getMilestoneTasks() {
     const ms = msState.milestones[msState.currentMilestone];
-    if (!ms || !ms.taskIds) return [];
+    if (!ms) return [];
+    if (ms.status === 'closed' && ms.frozenData && ms.frozenData.tasks) {
+        return ms.frozenData.tasks;
+    }
+    if (!ms.taskIds) return [];
     const taskIds = new Set(ms.taskIds.map(String));
     return msState.allTasks.filter(t => taskIds.has(String(t.id)));
 }
@@ -995,7 +1072,7 @@ function renderMemberStats() {
         // Estimate hours from taskMeta
         let totalHours = 0;
         userTasks.forEach(t => {
-            const meta = loadTaskMeta(t.id);
+            const meta = loadTaskMeta(t.id, t);
             totalHours += parseEstimateToHours(meta.estimate);
         });
 
@@ -1153,6 +1230,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // --- Event Bindings ---
     document.getElementById('btn-create-ms').addEventListener('click', createMilestone);
+    document.getElementById('btn-close-ms').addEventListener('click', () => closeMilestone(msState.currentMilestone));
     document.getElementById('btn-delete-ms').addEventListener('click', () => deleteMilestone(msState.currentMilestone));
     document.getElementById('btn-add-to-ms').addEventListener('click', addSelectedToMilestone);
     document.getElementById('btn-remove-from-ms')?.addEventListener('click', removeSelectedFromMilestone);

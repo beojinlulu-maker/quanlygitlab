@@ -840,6 +840,11 @@
                         Tạo Milestone
                     </button>
 
+                    <button id="btn-close-ms" class="btn-primary" style="display:none; background:#f97316; border-color:#ea580c;">
+                        <i data-lucide="lock" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i>
+                        Kết thúc
+                    </button>
+
                     <button id="btn-delete-ms" class="btn-danger" style="display:none">
                         <i data-lucide="trash-2" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i>
                         Xóa
@@ -848,7 +853,7 @@
             </div>
 
             <!-- Section 2: Unassigned Tasks Panel -->
-            <div class="unassigned-panel">
+            <div id="unassigned-panel" class="unassigned-panel">
                 <div class="unassigned-header">
                     <div class="unassigned-header-left">
                         <i data-lucide="list-checks" style="width: 20px; height: 20px;"></i>
@@ -893,9 +898,11 @@
                 <!-- 3.1 Overview Header -->
                 <div class="ms-overview-header">
                     <div class="ms-overview-top">
-                        <div>
-                            <h2 id="ms-name-display">Milestone</h2>
-                            <span id="ms-dates-display" class="ms-dates-display"></span>
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <h2 id="ms-name-display" style="margin:0;">Milestone</h2>
+                            <span id="ms-status-badge" style="font-size: 12px; padding: 4px 8px; border-radius: 4px; font-weight: bold; background: #e0e7ff; color: #4338ca; display: none;"></span>
+                        </div>
+                        <span id="ms-dates-display" class="ms-dates-display"></span>
                         </div>
                         <div id="ms-countdown" class="ms-countdown safe"></div>
                     </div>
