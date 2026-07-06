@@ -637,7 +637,7 @@ function renderUnassignedTasks() {
         tr.innerHTML = `
             <td style="text-align:center;"><input type="checkbox" data-task-id="${taskId}" ${isChecked ? 'checked' : ''}></td>
             <td class="cell-stt"><a href="${webUrl}" target="_blank" class="ms-task-link">#${task.iid || task.id}</a></td>
-            <td style="font-size:13px;font-weight:500;color:#1e293b;line-height:1.5;">${task.title || ''}</td>
+            <td style="font-size:13px;font-weight:500;color:#1e293b;line-height:1.5;">${formatTaskTitle(task)}</td>
             <td>${assigneesHtml}</td>
             <td>${labelsHtml}</td>
             <td class="ms-date-cell">${formatDateVN(task.created_at)}</td>
@@ -727,7 +727,7 @@ function renderDoneUnassignedTasks() {
         tr.innerHTML = `
             <td style="text-align:center;"><input type="checkbox" data-task-id="${taskId}" ${isChecked ? 'checked' : ''}></td>
             <td class="cell-stt"><a href="${webUrl}" target="_blank" class="ms-task-link">#${task.iid || task.id}</a></td>
-            <td style="font-size:13px;font-weight:500;color:#1e293b;line-height:1.5;">${task.title || ''}${statusBadge}</td>
+            <td style="font-size:13px;font-weight:500;color:#1e293b;line-height:1.5;">${formatTaskTitle(task)}${statusBadge}</td>
             <td>${assigneesHtml}</td>
             <td>${labelsHtml}</td>
             <td class="ms-date-cell">${formatDateVN(task.created_at)}</td>
@@ -1143,7 +1143,7 @@ function renderMsTaskTable() {
         tr.innerHTML = `
             <td style="text-align:center;"><input type="checkbox" data-task-id="${taskId}" ${isChecked ? 'checked' : ''}></td>
             <td class="cell-stt"><a href="${webUrl}" target="_blank" class="ms-task-link">#${task.iid || task.id}</a></td>
-            <td style="font-size:13px;font-weight:500;color:#1e293b;line-height:1.5;">${task.title || ''}</td>
+            <td style="font-size:13px;font-weight:500;color:#1e293b;line-height:1.5;">${formatTaskTitle(task)}</td>
             <td>${assigneesHtml}</td>
             <td>${labelsHtml}</td>
             <td><span style="display:inline-block;padding:3px 10px;border-radius:100px;font-size:10px;font-weight:700;background:${statusInfo.bg};color:${statusInfo.color};border:1px solid ${statusInfo.color}22;">${statusInfo.text}</span></td>
@@ -1254,6 +1254,76 @@ function exportMilestoneToExcel() {
 }
 
 // ============================================================
+// TRANSLATION
+// ============================================================
+
+function formatTaskTitle(task) {
+    const original = task.title || '';
+    const vi = (window.taskTranslations && window.taskTranslations[original]) ? window.taskTranslations[original] : '';
+    if (vi && vi !== original) {
+        return `${original}<br><span style="color:#64748b; font-size:12px; display:inline-block; margin-top:2px;">/ ${vi}</span>`;
+    }
+    return original;
+}
+
+async function translateTitles(tasks) {
+    if (!window.taskTranslations) window.taskTranslations = {};
+    if (!window.db) return;
+    
+    try {
+        const doc = await window.db.collection('settings').doc('taskTranslations').get();
+        if (doc.exists) {
+            window.taskTranslations = doc.data() || {};
+        }
+    } catch (e) {
+        console.error("Failed to load translations from DB", e);
+    }
+
+    const toTranslate = [];
+    tasks.forEach(t => {
+        const title = t.title ? t.title.trim() : '';
+        if (title && !window.taskTranslations[title]) {
+            if (!toTranslate.includes(title)) {
+                toTranslate.push(title);
+            }
+        }
+    });
+
+    if (toTranslate.length > 0) {
+        const chunkSize = 50;
+        let modified = false;
+        
+        for (let i = 0; i < toTranslate.length; i += chunkSize) {
+            const chunk = toTranslate.slice(i, i + chunkSize);
+            const text = encodeURIComponent(chunk.join('\n'));
+            try {
+                const res = await fetch('https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=vi&dt=t&q=' + text);
+                const data = await res.json();
+                let result = '';
+                if(data && data[0]) {
+                    data[0].forEach(item => result += item[0] || '');
+                }
+                const translatedLines = result.split('\n');
+                chunk.forEach((original, idx) => {
+                    if (translatedLines[idx]) {
+                        window.taskTranslations[original] = translatedLines[idx].trim();
+                        modified = true;
+                    }
+                });
+            } catch (e) {
+                console.error("Translation error", e);
+            }
+        }
+        
+        if (modified) {
+            try {
+                await window.db.collection('settings').doc('taskTranslations').set(window.taskTranslations);
+            } catch(e) { console.error(e); }
+        }
+    }
+}
+
+// ============================================================
 // INITIALIZATION
 // ============================================================
 
@@ -1277,6 +1347,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Hide loading
     const loader = document.getElementById('ms-loading');
     if (loader) loader.classList.add('hidden');
+
+    // Translate in background
+    translateTitles(msState.allTasks).then(() => {
+        // Re-render to show translations
+        renderUnassignedTasks();
+        if(typeof renderDoneUnassignedTasks === 'function') renderDoneUnassignedTasks();
+        if (msState.currentMilestone) {
+            renderMsTaskTable();
+        }
+    });
 
     // --- Event Bindings ---
     document.getElementById('btn-create-ms').addEventListener('click', createMilestone);
