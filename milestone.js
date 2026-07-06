@@ -1224,7 +1224,7 @@ function exportMilestoneToExcel() {
     }
 
     let csvContent = "\uFEFF"; // BOM for UTF-8 Excel support
-    csvContent += "ID,TASK / TITLE,ASSIGNEE,LABELS,TRẠNG THÁI,NGÀY TẠO\n";
+    csvContent += "ID,TASK / TITLE,ASSIGNEE,AUTHOR,LABELS,TRẠNG THÁI,NGÀY TẠO\n";
 
     const statusLabels = {
         not_started: 'Chưa bắt đầu',
@@ -1235,9 +1235,16 @@ function exportMilestoneToExcel() {
     };
 
     tasks.forEach(task => {
-        const id = task.iid || task.id;
-        const title = `"${(task.title || '').replace(/"/g, '""')}"`;
+        const webUrl = task.web_url || `https://gitlab.com/projects/${PROJECT_ID}/issues/${task.iid || task.id}`;
+        const idFormula = `"=HYPERLINK(""${webUrl}"", ""${task.iid || task.id}"")"`;
+        
+        const originalTitle = task.title || '';
+        const viTitle = (window.taskTranslations && window.taskTranslations[originalTitle]) ? window.taskTranslations[originalTitle] : '';
+        const displayTitle = (viTitle && viTitle !== originalTitle) ? `${originalTitle} / ${viTitle}` : originalTitle;
+        const title = `"${displayTitle.replace(/"/g, '""')}"`;
+        
         const assignees = `"${(task.assignees || []).map(a => TEAM_NAMES[a.username] || a.name || a.username).join(', ')}"`;
+        const author = `"${task.author ? (TEAM_NAMES[task.author.username] || task.author.username || task.author.name) : ''}"`;
         const labels = `"${(task.labels || []).join(', ').replace(/"/g, '""')}"`;
         
         const statusKey = getTaskStatus(task);
@@ -1245,7 +1252,7 @@ function exportMilestoneToExcel() {
         
         const date = `"${formatDateVN(task.created_at)}"`;
 
-        csvContent += `${id},${title},${assignees},${labels},${status},${date}\n`;
+        csvContent += `${idFormula},${title},${assignees},${author},${labels},${status},${date}\n`;
     });
 
     const ms = msState.currentMilestone ? msState.milestones[msState.currentMilestone] : null;
