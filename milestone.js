@@ -1215,7 +1215,7 @@ function exportMilestoneToExcel() {
     }
 
     let csvContent = "\uFEFF"; // BOM for UTF-8 Excel support
-    csvContent += "ID,TASK / TITLE,ASSIGNEE,LABELS,TRẠNG THÁI,NGÀY TẠO,TÓM TẮT NỘI DUNG BẰNG TIẾNG VIỆT\n";
+    csvContent += "ID,TASK / TITLE,ASSIGNEE,LABELS,TRẠNG THÁI,NGÀY TẠO\n";
 
     const statusLabels = {
         not_started: 'Chưa bắt đầu',
@@ -1235,11 +1235,8 @@ function exportMilestoneToExcel() {
         const status = `"${statusLabels[statusKey] || statusKey}"`;
         
         const date = `"${formatDateVN(task.created_at)}"`;
-        
-        // Tóm tắt nội dung bằng tiếng Việt (Lấy từ description trên GitLab)
-        const summary = `"${(task.description || '').replace(/"/g, '""')}"`;
 
-        csvContent += `${id},${title},${assignees},${labels},${status},${date},${summary}\n`;
+        csvContent += `${id},${title},${assignees},${labels},${status},${date}\n`;
     });
 
     const ms = msState.currentMilestone ? msState.milestones[msState.currentMilestone] : null;
