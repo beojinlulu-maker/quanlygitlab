@@ -1204,6 +1204,55 @@ function showStatusTasks(status) {
 }
 
 // ============================================================
+// EXPORT TO EXCEL
+// ============================================================
+
+function exportMilestoneToExcel() {
+    const tasks = getMilestoneTasks();
+    if (!tasks || tasks.length === 0) {
+        alert("Không có dữ liệu để xuất!");
+        return;
+    }
+
+    let csvContent = "\uFEFF"; // BOM for UTF-8 Excel support
+    csvContent += "ID,Task/Title,Assignees,Trạng thái,Số giờ,Ngày tạo\n";
+
+    const statusLabels = {
+        not_started: 'Chưa bắt đầu',
+        in_progress: 'Đang xử lý',
+        review: 'Chờ Review',
+        revision: 'Revision',
+        done: 'Hoàn thành'
+    };
+
+    tasks.forEach(task => {
+        const id = task.iid || task.id;
+        const title = `"${(task.title || '').replace(/"/g, '""')}"`;
+        const assignees = `"${(task.assignees || []).map(a => TEAM_NAMES[a.username] || a.name || a.username).join(', ')}"`;
+        const statusKey = getTaskStatus(task);
+        const status = statusLabels[statusKey] || statusKey;
+        const meta = loadTaskMeta(task.id, task);
+        const hours = parseEstimateToHours(meta.estimate);
+        const date = formatDateVN(task.created_at);
+
+        csvContent += `${id},${title},${assignees},${status},${hours},${date}\n`;
+    });
+
+    const ms = msState.currentMilestone ? msState.milestones[msState.currentMilestone] : null;
+    const filename = ms ? `Milestone_${ms.name.replace(/ /g, '_')}.csv` : 'Milestone_Tasks.csv';
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+// ============================================================
 // INITIALIZATION
 // ============================================================
 
@@ -1234,6 +1283,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('btn-delete-ms').addEventListener('click', () => deleteMilestone(msState.currentMilestone));
     document.getElementById('btn-add-to-ms').addEventListener('click', addSelectedToMilestone);
     document.getElementById('btn-remove-from-ms')?.addEventListener('click', removeSelectedFromMilestone);
+    
+    const btnExport = document.getElementById('btn-export-excel');
+    if (btnExport) btnExport.addEventListener('click', exportMilestoneToExcel);
 
     document.getElementById('ms-select').addEventListener('change', (e) => {
         selectMilestone(e.target.value);
