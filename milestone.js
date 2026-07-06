@@ -622,6 +622,8 @@ function renderUnassignedTasks() {
             .map(a => `<span class="ms-assignee-badge">${TEAM_NAMES[a.username] || a.username || a.name}</span>`)
             .join('') || '<span style="color:#94a3b8;font-size:11px;">—</span>';
 
+        const authorHtml = task.author ? `<span class="ms-assignee-badge" style="background:#e2e8f0; color:#475569; border:none;">${TEAM_NAMES[task.author.username] || task.author.username || task.author.name}</span>` : '<span style="color:#94a3b8;font-size:11px;">—</span>';
+
         const labelsHtml = (task.labels || [])
             .map(l => {
                 let cls = 'ms-label-badge';
@@ -639,6 +641,7 @@ function renderUnassignedTasks() {
             <td class="cell-stt"><a href="${webUrl}" target="_blank" class="ms-task-link">#${task.iid || task.id}</a></td>
             <td style="font-size:13px;font-weight:500;color:#1e293b;line-height:1.5;">${formatTaskTitle(task)}</td>
             <td>${assigneesHtml}</td>
+            <td>${authorHtml}</td>
             <td>${labelsHtml}</td>
             <td class="ms-date-cell">${formatDateVN(task.created_at)}</td>
         `;
@@ -724,11 +727,14 @@ function renderDoneUnassignedTasks() {
         
         tr.style.background = '#f0fdf4';
         
+        const authorHtml = task.author ? `<span class="ms-assignee-badge" style="background:#e2e8f0; color:#475569; border:none;">${TEAM_NAMES[task.author.username] || task.author.username || task.author.name}</span>` : '<span style="color:#94a3b8;font-size:11px;">—</span>';
+        
         tr.innerHTML = `
             <td style="text-align:center;"><input type="checkbox" data-task-id="${taskId}" ${isChecked ? 'checked' : ''}></td>
             <td class="cell-stt"><a href="${webUrl}" target="_blank" class="ms-task-link">#${task.iid || task.id}</a></td>
             <td style="font-size:13px;font-weight:500;color:#1e293b;line-height:1.5;">${formatTaskTitle(task)}${statusBadge}</td>
             <td>${assigneesHtml}</td>
+            <td>${authorHtml}</td>
             <td>${labelsHtml}</td>
             <td class="ms-date-cell">${formatDateVN(task.created_at)}</td>
         `;
@@ -1128,6 +1134,8 @@ function renderMsTaskTable() {
             .map(a => `<span class="ms-assignee-badge">${TEAM_NAMES[a.username] || a.username || a.name}</span>`)
             .join('') || '<span style="color:#94a3b8;font-size:11px;">—</span>';
 
+        const authorHtml = task.author ? `<span class="ms-assignee-badge" style="background:#e2e8f0; color:#475569; border:none;">${TEAM_NAMES[task.author.username] || task.author.username || task.author.name}</span>` : '<span style="color:#94a3b8;font-size:11px;">—</span>';
+
         const labelsHtml = (task.labels || [])
             .map(l => {
                 let cls = 'ms-label-badge';
@@ -1145,6 +1153,7 @@ function renderMsTaskTable() {
             <td class="cell-stt"><a href="${webUrl}" target="_blank" class="ms-task-link">#${task.iid || task.id}</a></td>
             <td style="font-size:13px;font-weight:500;color:#1e293b;line-height:1.5;">${formatTaskTitle(task)}</td>
             <td>${assigneesHtml}</td>
+            <td>${authorHtml}</td>
             <td>${labelsHtml}</td>
             <td><span style="display:inline-block;padding:3px 10px;border-radius:100px;font-size:10px;font-weight:700;background:${statusInfo.bg};color:${statusInfo.color};border:1px solid ${statusInfo.color}22;">${statusInfo.text}</span></td>
             <td class="ms-date-cell">${formatDateVN(task.created_at)}</td>
