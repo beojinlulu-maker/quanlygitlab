@@ -1213,18 +1213,15 @@ function showStatusTasks(status) {
 }
 
 // ============================================================
-// EXPORT TO EXCEL
+// COPY TO CLIPBOARD
 // ============================================================
 
-function exportMilestoneToExcel() {
+function copyMilestoneTable() {
     const tasks = getMilestoneTasks();
     if (!tasks || tasks.length === 0) {
-        alert("Không có dữ liệu để xuất!");
+        alert("Không có dữ liệu để copy!");
         return;
     }
-
-    let csvContent = "\uFEFF"; // BOM for UTF-8 Excel support
-    csvContent += "ID,TASK / TITLE,ASSIGNEE,AUTHOR,LABELS,TRẠNG THÁI,NGÀY TẠO\n";
 
     const statusLabels = {
         not_started: 'Chưa bắt đầu',
@@ -1234,39 +1231,71 @@ function exportMilestoneToExcel() {
         done: 'Hoàn thành'
     };
 
+    let html = `<table border="1" style="border-collapse: collapse; font-family: sans-serif; font-size: 13px;">
+        <thead>
+            <tr>
+                <th style="padding: 8px; background-color: #f1f5f9; text-align: left;">ID</th>
+                <th style="padding: 8px; background-color: #f1f5f9; text-align: left;">TASK / TITLE</th>
+                <th style="padding: 8px; background-color: #f1f5f9; text-align: left;">ASSIGNEE</th>
+                <th style="padding: 8px; background-color: #f1f5f9; text-align: left;">AUTHOR</th>
+                <th style="padding: 8px; background-color: #f1f5f9; text-align: left;">LABELS</th>
+                <th style="padding: 8px; background-color: #f1f5f9; text-align: left;">TRẠNG THÁI</th>
+                <th style="padding: 8px; background-color: #f1f5f9; text-align: left;">NGÀY TẠO</th>
+            </tr>
+        </thead>
+        <tbody>`;
+
     tasks.forEach(task => {
         const webUrl = task.web_url || `https://gitlab.com/projects/${PROJECT_ID}/issues/${task.iid || task.id}`;
-        const idFormula = `"=HYPERLINK(""${webUrl}"", ""${task.iid || task.id}"")"`;
+        const idHtml = `<a href="${webUrl}">#${task.iid || task.id}</a>`;
         
         const originalTitle = task.title || '';
         const viTitle = (window.taskTranslations && window.taskTranslations[originalTitle]) ? window.taskTranslations[originalTitle] : '';
         const displayTitle = (viTitle && viTitle !== originalTitle) ? `${originalTitle} / ${viTitle}` : originalTitle;
-        const title = `"${displayTitle.replace(/"/g, '""')}"`;
         
-        const assignees = `"${(task.assignees || []).map(a => TEAM_NAMES[a.username] || a.name || a.username).join(', ')}"`;
-        const author = `"${task.author ? (TEAM_NAMES[task.author.username] || task.author.username || task.author.name) : ''}"`;
-        const labels = `"${(task.labels || []).join(', ').replace(/"/g, '""')}"`;
+        const assignees = (task.assignees || []).map(a => TEAM_NAMES[a.username] || a.name || a.username).join(', ');
+        const author = task.author ? (TEAM_NAMES[task.author.username] || task.author.username || task.author.name) : '';
+        const labels = (task.labels || []).join(', ');
         
         const statusKey = getTaskStatus(task);
-        const status = `"${statusLabels[statusKey] || statusKey}"`;
-        
-        const date = `"${formatDateVN(task.created_at)}"`;
+        const status = statusLabels[statusKey] || statusKey;
+        const date = formatDateVN(task.created_at);
 
-        csvContent += `${idFormula},${title},${assignees},${author},${labels},${status},${date}\n`;
+        html += `
+            <tr>
+                <td style="padding: 8px;">${idHtml}</td>
+                <td style="padding: 8px;">${displayTitle}</td>
+                <td style="padding: 8px;">${assignees}</td>
+                <td style="padding: 8px;">${author}</td>
+                <td style="padding: 8px;">${labels}</td>
+                <td style="padding: 8px;">${status}</td>
+                <td style="padding: 8px;">${date}</td>
+            </tr>`;
     });
+    html += `</tbody></table>`;
 
-    const ms = msState.currentMilestone ? msState.milestones[msState.currentMilestone] : null;
-    const filename = ms ? `Milestone_${ms.name.replace(/ /g, '_')}.csv` : 'Milestone_Tasks.csv';
+    try {
+        const container = document.createElement('div');
+        container.innerHTML = html;
+        container.style.position = 'fixed';
+        container.style.left = '-9999px';
+        document.body.appendChild(container);
 
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+        const selection = window.getSelection();
+        const range = document.createRange();
+        range.selectNodeContents(container);
+        selection.removeAllRanges();
+        selection.addRange(range);
+
+        document.execCommand('copy');
+        selection.removeAllRanges();
+        document.body.removeChild(container);
+
+        alert("Đã copy bảng vào Clipboard thành công! Bạn có thể dán (Ctrl+V) vào Zalo, Teams, Excel...");
+    } catch (e) {
+        console.error("Copy failed", e);
+        alert("Lỗi khi copy. Trình duyệt của bạn có thể không hỗ trợ tính năng này.");
+    }
 }
 
 // ============================================================
@@ -1381,8 +1410,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('btn-add-to-ms').addEventListener('click', addSelectedToMilestone);
     document.getElementById('btn-remove-from-ms')?.addEventListener('click', removeSelectedFromMilestone);
     
-    const btnExport = document.getElementById('btn-export-excel');
-    if (btnExport) btnExport.addEventListener('click', exportMilestoneToExcel);
+    const btnCopyTable = document.getElementById('btn-copy-table');
+    if (btnCopyTable) btnCopyTable.addEventListener('click', copyMilestoneTable);
 
     document.getElementById('ms-select').addEventListener('change', (e) => {
         selectMilestone(e.target.value);
