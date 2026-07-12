@@ -635,8 +635,10 @@
                         let memberHasReview = false;
                         let memberHasRevision = false;
 
-                        if (isCustomerProj && (isAssignee || isAuthor)) {
+                        if (isCustomerProj && isAssignee) {
                             memberHasCustomer = true;
+                        }
+                        if (isCustomerProj && (isAssignee || isAuthor)) {
                             isTeamCustomerTask = true;
                         }
                         if (!isCustomerProj && isAuthor && !labels.some(l => l.includes('review') || l.includes('revision'))) {
