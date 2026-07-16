@@ -1293,6 +1293,9 @@ ${contentToSummarize}`;
             if (response.status === 400) {
                 return "Lỗi cấu hình API. Có thể mã Key không đúng.";
             }
+            if (response.status === 429) {
+                return "Lỗi: Quá tải AI (Google giới hạn số lần tóm tắt mỗi phút). Vui lòng đợi 1 phút và thử lại.";
+            }
             throw new Error(`API error: ${response.status}`);
         }
 
@@ -1368,6 +1371,8 @@ async function showDoneTaskInfo() {
             if (window.taskSummaries[task.id]) {
                 hasNewSummaries = true;
             }
+            // Delay 4500ms between AI calls to avoid Google Rate Limits (15 RPM)
+            await new Promise(r => setTimeout(r, 4500));
         }
     }
 
