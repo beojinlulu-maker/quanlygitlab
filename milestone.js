@@ -1391,36 +1391,133 @@ async function showDoneTaskInfo() {
     document.getElementById('done-task-modal').style.display = 'flex';
     if (window.lucide) lucide.createIcons();
 
-    // Trigger AI Summarization for missing summaries
-    let hasNewSummaries = false;
+    // Batch AI Summarization - ONE single API call for ALL tasks
     const tasksToSummarize = tasks.filter(t => !window.taskSummaries[t.id]);
-    let currentIdx = 0;
     
-    for (const task of tasks) {
-        if (!window.taskSummaries[task.id]) {
-            currentIdx++;
-            // Update status indicator
-            const tr = document.getElementById(`done-task-row-${task.id}`);
-            if (tr) {
-                tr.querySelector('.done-task-desc').innerHTML = `<span style="color:#8b5cf6;">⏳ AI đang tóm tắt (${currentIdx}/${tasksToSummarize.length})...</span>`;
-            }
-            
-            const summary = await summarizeTaskWithGemini(task);
-            if (tr) {
-                tr.querySelector('.done-task-desc').innerHTML = summary.replace(/\n/g, '<br>');
-            }
-            if (window.taskSummaries[task.id]) {
-                hasNewSummaries = true;
-            }
-            // Delay 6000ms between AI calls to stay well within Google Rate Limits
-            if (currentIdx < tasksToSummarize.length) {
-                await new Promise(r => setTimeout(r, 6000));
-            }
-        }
-    }
+    if (tasksToSummarize.length === 0) return; // All already cached
 
-    if (hasNewSummaries) {
-        await saveTaskSummaries();
+    const apiKey = getGeminiApiKey();
+    if (!apiKey) return;
+
+    // Build batch prompt
+    let batchPrompt = `Hãy đóng vai một chuyên gia phân tích nghiệp vụ. Dưới đây là danh sách ${tasksToSummarize.length} công việc (task). Hãy TÓM TẮT nội dung từng task thành 1 đến 2 ý chính bằng tiếng Việt.
+
+Yêu cầu:
+- Rất ngắn gọn, súc tích. Mỗi task dùng tối đa 2 gạch đầu dòng (dùng ký tự -).
+- Không dịch y nguyên, hãy hiểu và tóm tắt ý chính.
+- KHÔNG thêm bất kỳ giải thích nào thừa.
+- Trả kết quả theo định dạng chính xác sau, mỗi task bắt đầu bằng [TASK_X] (X là số thứ tự):
+
+`;
+
+    tasksToSummarize.forEach((task, idx) => {
+        let desc = task.description;
+        if (!desc) {
+            const liveTask = msState.allTasks.find(t => t.id === task.id);
+            if (liveTask && liveTask.description) desc = liveTask.description;
+        }
+        // Truncate description to 500 chars to keep prompt manageable
+        if (desc && desc.length > 500) desc = desc.substring(0, 500) + '...';
+        
+        const content = desc ? `Title: ${task.title}\nDescription: ${desc}` : `Title: ${task.title}`;
+        batchPrompt += `[TASK_${idx + 1}]\n${content}\n\n`;
+    });
+
+    // Update all rows to show loading
+    tasksToSummarize.forEach(task => {
+        const tr = document.getElementById(`done-task-row-${task.id}`);
+        if (tr) {
+            tr.querySelector('.done-task-desc').innerHTML = '<span style="color:#8b5cf6;">⏳ AI đang tóm tắt tất cả (chỉ 1 lần gọi)...</span>';
+        }
+    });
+
+    const maxRetries = 3;
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${apiKey}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: batchPrompt }] }],
+                    generationConfig: {
+                        temperature: 0.3,
+                        maxOutputTokens: 2000
+                    }
+                })
+            });
+
+            if (response.status === 429 || response.status === 503) {
+                console.warn(`[AI Batch] Status ${response.status}. Attempt ${attempt + 1}/${maxRetries + 1}. Retrying...`);
+                if (attempt < maxRetries) {
+                    const waitTime = Math.pow(2, attempt + 1) * 10000; // 20s, 40s, 80s
+                    tasksToSummarize.forEach(task => {
+                        const tr = document.getElementById(`done-task-row-${task.id}`);
+                        if (tr) {
+                            tr.querySelector('.done-task-desc').innerHTML = `<span style="color:#f59e0b;">⏳ AI đang bận, tự động thử lại lần ${attempt + 2} sau ${waitTime/1000}s...</span>`;
+                        }
+                    });
+                    await new Promise(r => setTimeout(r, waitTime));
+                    continue;
+                }
+                tasksToSummarize.forEach(task => {
+                    const tr = document.getElementById(`done-task-row-${task.id}`);
+                    if (tr) {
+                        tr.querySelector('.done-task-desc').innerHTML = '⏳ Quá tải AI. Vui lòng đóng bảng, đợi 1 phút rồi mở lại.';
+                    }
+                });
+                return;
+            }
+
+            if (!response.ok) {
+                const errBody = await response.text();
+                console.error(`[AI Batch] HTTP ${response.status}:`, errBody);
+                if (attempt < maxRetries) {
+                    await new Promise(r => setTimeout(r, 10000));
+                    continue;
+                }
+                tasksToSummarize.forEach(task => {
+                    const tr = document.getElementById(`done-task-row-${task.id}`);
+                    if (tr) {
+                        tr.querySelector('.done-task-desc').innerHTML = `Lỗi API (HTTP ${response.status}).`;
+                    }
+                });
+                return;
+            }
+
+            const data = await response.json();
+            const fullText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+            console.log('[AI Batch] Success! Full response:', fullText);
+
+            // Parse response - split by [TASK_X] markers
+            const sections = fullText.split(/\[TASK_\d+\]/);
+            sections.shift(); // Remove empty first element
+
+            tasksToSummarize.forEach((task, idx) => {
+                const summary = (sections[idx] || 'Không thể tóm tắt.').trim();
+                window.taskSummaries[task.id] = summary;
+                const tr = document.getElementById(`done-task-row-${task.id}`);
+                if (tr) {
+                    tr.querySelector('.done-task-desc').innerHTML = summary.replace(/\n/g, '<br>');
+                }
+            });
+
+            await saveTaskSummaries();
+            console.log('[AI Batch] All summaries saved to Firestore!');
+            return; // Success - exit retry loop
+
+        } catch (e) {
+            console.error(`[AI Batch] Network error (attempt ${attempt + 1}):`, e);
+            if (attempt < maxRetries) {
+                await new Promise(r => setTimeout(r, 10000));
+                continue;
+            }
+            tasksToSummarize.forEach(task => {
+                const tr = document.getElementById(`done-task-row-${task.id}`);
+                if (tr) {
+                    tr.querySelector('.done-task-desc').innerHTML = `Lỗi kết nối mạng: ${e.message || 'Unknown'}`;
+                }
+            });
+        }
     }
 }
 
