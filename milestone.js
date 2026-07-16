@@ -1385,6 +1385,14 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('done-task-modal').style.display = 'none';
         }
     });
+    document.getElementById('btn-change-ai-key')?.addEventListener('click', () => {
+        const currentKey = localStorage.getItem('geminiApiKey') || '';
+        const newKey = prompt("Vui lòng nhập mã Gemini API Key mới của bạn (bắt đầu bằng AIzaSy...):", currentKey);
+        if (newKey && newKey.trim() !== '') {
+            localStorage.setItem('geminiApiKey', newKey.trim());
+            alert("Đã lưu API Key mới! Vui lòng đóng bảng này và mở lại để AI chạy lại.");
+        }
+    });
 });
 
 // ============================================================
