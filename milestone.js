@@ -1214,10 +1214,104 @@ function showStatusTasks(status) {
 }
 
 // ============================================================
+// GEMINI AI INTEGRATION
+// ============================================================
+
+window.taskSummaries = {};
+
+async function loadTaskSummaries() {
+    if (!window.db) return;
+    try {
+        const doc = await window.db.collection('settings').doc('taskSummaries').get();
+        if (doc.exists) {
+            window.taskSummaries = doc.data() || {};
+        }
+    } catch (e) {
+        console.error("Failed to load task summaries from DB", e);
+    }
+}
+
+async function saveTaskSummaries() {
+    if (!window.db) return;
+    try {
+        await window.db.collection('settings').doc('taskSummaries').set(window.taskSummaries);
+    } catch (e) {
+        console.error("Failed to save task summaries to DB", e);
+    }
+}
+
+function getGeminiApiKey() {
+    let key = localStorage.getItem('geminiApiKey');
+    if (!key) {
+        key = prompt("Tính năng tóm tắt tự động cần có Google Gemini API Key.\nVui lòng nhập mã API Key (bắt đầu bằng AIzaSy...) của bạn:");
+        if (key) {
+            localStorage.setItem('geminiApiKey', key.trim());
+        }
+    }
+    return key ? key.trim() : null;
+}
+
+async function summarizeTaskWithGemini(task) {
+    if (window.taskSummaries[task.id]) {
+        return window.taskSummaries[task.id];
+    }
+
+    const apiKey = getGeminiApiKey();
+    if (!apiKey) return "Vui lòng nhập API Key để sử dụng tính năng tóm tắt.";
+
+    let desc = task.description;
+    if (!desc) {
+        const liveTask = msState.allTasks.find(t => t.id === task.id);
+        if (liveTask && liveTask.description) desc = liveTask.description;
+    }
+
+    const contentToSummarize = desc ? `Title: ${task.title}\nDescription: ${desc}` : `Title: ${task.title}`;
+
+    const promptText = `Hãy đóng vai một chuyên gia phân tích nghiệp vụ. Nhiệm vụ của bạn là đọc thông tin về một công việc (Task) dưới đây và TÓM TẮT nội dung của công việc đó thành 1 đến 2 ý chính bằng tiếng Việt.
+Yêu cầu:
+- Rất ngắn gọn, súc tích. Dùng tối đa 2 gạch đầu dòng (dùng ký tự -).
+- Không dịch y nguyên, hãy hiểu và tóm tắt ý chính.
+- KHÔNG thêm bất kỳ giải thích nào thừa.
+
+Nội dung Task:
+${contentToSummarize}`;
+
+    try {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                contents: [{ parts: [{ text: promptText }] }],
+                generationConfig: {
+                    temperature: 0.3,
+                    maxOutputTokens: 250
+                }
+            })
+        });
+
+        if (!response.ok) {
+            if (response.status === 400) {
+                return "Lỗi cấu hình API. Có thể mã Key không đúng.";
+            }
+            throw new Error(`API error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        const summary = data.candidates?.[0]?.content?.parts?.[0]?.text || "Không thể tóm tắt.";
+        
+        window.taskSummaries[task.id] = summary.trim();
+        return window.taskSummaries[task.id];
+    } catch (e) {
+        console.error("Gemini API Error:", e);
+        return "Lỗi kết nối AI hoặc mã Key không hợp lệ.";
+    }
+}
+
+// ============================================================
 // DONE TASK INFO
 // ============================================================
 
-function showDoneTaskInfo() {
+async function showDoneTaskInfo() {
     const msId = msState.currentMilestone;
     if (!msId) {
         alert("Vui lòng chọn một Milestone!");
@@ -1234,32 +1328,52 @@ function showDoneTaskInfo() {
 
     if (tasks.length === 0) {
         tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; padding:12px;">Không có task hoàn thành nào trong milestone này.</td></tr>';
-    } else {
-        tasks.forEach((task, index) => {
-            const originalTitle = task.title || '';
-            const viTitle = (window.taskTranslations && window.taskTranslations[originalTitle]) ? window.taskTranslations[originalTitle] : '';
-            const displayTitle = viTitle ? viTitle : originalTitle;
-            
-            let desc = task.description;
-            if (!desc) {
-                const liveTask = msState.allTasks.find(t => t.id === task.id);
-                if (liveTask && liveTask.description) {
-                    desc = liveTask.description;
-                }
-            }
-            const description = (desc || '').replace(/\n/g, '<br>');
+        document.getElementById('done-task-modal').style.display = 'flex';
+        return;
+    } 
+    
+    // Initial Render
+    tasks.forEach((task, index) => {
+        const originalTitle = task.title || '';
+        const viTitle = (window.taskTranslations && window.taskTranslations[originalTitle]) ? window.taskTranslations[originalTitle] : '';
+        const displayTitle = viTitle ? viTitle : originalTitle;
+        
+        let descHtml = '<span style="color:#8b5cf6;"><i data-lucide="bot" style="width:14px;height:14px;vertical-align:middle;margin-right:4px;"></i>AI đang tóm tắt...</span>';
+        if (window.taskSummaries[task.id]) {
+            descHtml = window.taskSummaries[task.id].replace(/\n/g, '<br>');
+        }
 
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td style="padding:10px; border:1px solid #e2e8f0; text-align:center;">${index + 1}</td>
-                <td style="padding:10px; border:1px solid #e2e8f0; font-weight: 500;">${displayTitle}</td>
-                <td style="padding:10px; border:1px solid #e2e8f0; font-size: 13px; color: #475569;">${description}</td>
-            `;
-            tbody.appendChild(tr);
-        });
-    }
+        const tr = document.createElement('tr');
+        tr.id = `done-task-row-${task.id}`;
+        tr.innerHTML = `
+            <td style="padding:10px; border:1px solid #e2e8f0; text-align:center;">${index + 1}</td>
+            <td style="padding:10px; border:1px solid #e2e8f0; font-weight: 500;">${displayTitle}</td>
+            <td class="done-task-desc" style="padding:10px; border:1px solid #e2e8f0; font-size: 13px; color: #475569; line-height: 1.5;">${descHtml}</td>
+        `;
+        tbody.appendChild(tr);
+    });
 
     document.getElementById('done-task-modal').style.display = 'flex';
+    if (window.lucide) lucide.createIcons();
+
+    // Trigger AI Summarization for missing summaries
+    let hasNewSummaries = false;
+    for (const task of tasks) {
+        if (!window.taskSummaries[task.id]) {
+            const summary = await summarizeTaskWithGemini(task);
+            const tr = document.getElementById(`done-task-row-${task.id}`);
+            if (tr) {
+                tr.querySelector('.done-task-desc').innerHTML = summary.replace(/\n/g, '<br>');
+            }
+            if (window.taskSummaries[task.id]) {
+                hasNewSummaries = true;
+            }
+        }
+    }
+
+    if (hasNewSummaries) {
+        await saveTaskSummaries();
+    }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -1443,6 +1557,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Load milestones from Firestore
     await loadMilestonesFromFirestore();
+    
+    // Load task summaries from Firestore
+    await loadTaskSummaries();
 
     // Fetch tasks from GitLab
     await fetchProjectTasks();
