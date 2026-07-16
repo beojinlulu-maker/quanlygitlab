@@ -1276,38 +1276,70 @@ Yêu cầu:
 Nội dung Task:
 ${contentToSummarize}`;
 
-    try {
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${apiKey}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                contents: [{ parts: [{ text: promptText }] }],
-                generationConfig: {
-                    temperature: 0.3,
-                    maxOutputTokens: 250
-                }
-            })
-        });
+    const maxRetries = 3;
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${apiKey}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: promptText }] }],
+                    generationConfig: {
+                        temperature: 0.3,
+                        maxOutputTokens: 250
+                    }
+                })
+            });
 
-        if (!response.ok) {
-            if (response.status === 400) {
-                return "Lỗi cấu hình API. Có thể mã Key không đúng.";
-            }
             if (response.status === 429) {
-                return "Lỗi: Quá tải AI (Google giới hạn số lần tóm tắt mỗi phút). Vui lòng đợi 1 phút và thử lại.";
+                console.warn(`[AI] Task #${task.id} - Rate limited (429). Attempt ${attempt + 1}/${maxRetries + 1}. Waiting...`);
+                if (attempt < maxRetries) {
+                    const waitTime = Math.pow(2, attempt + 1) * 5000; // 10s, 20s, 40s
+                    await new Promise(r => setTimeout(r, waitTime));
+                    continue;
+                }
+                return "⏳ Quá tải AI. Vui lòng đóng bảng, đợi 1 phút rồi mở lại.";
             }
-            throw new Error(`API error: ${response.status}`);
-        }
 
-        const data = await response.json();
-        const summary = data.candidates?.[0]?.content?.parts?.[0]?.text || "Không thể tóm tắt.";
-        
-        window.taskSummaries[task.id] = summary.trim();
-        return window.taskSummaries[task.id];
-    } catch (e) {
-        console.error("Gemini API Error:", e);
-        return "Lỗi kết nối AI hoặc mã Key không hợp lệ.";
+            if (response.status === 503) {
+                console.warn(`[AI] Task #${task.id} - Service unavailable (503). Attempt ${attempt + 1}/${maxRetries + 1}. Waiting...`);
+                if (attempt < maxRetries) {
+                    const waitTime = Math.pow(2, attempt + 1) * 5000;
+                    await new Promise(r => setTimeout(r, waitTime));
+                    continue;
+                }
+                return "⏳ Máy chủ AI đang bận. Vui lòng đóng bảng, đợi 1 phút rồi mở lại.";
+            }
+
+            if (!response.ok) {
+                const errBody = await response.text();
+                console.error(`[AI] Task #${task.id} - HTTP ${response.status}:`, errBody);
+                if (response.status === 400) {
+                    return "Lỗi cấu hình API. Có thể mã Key không đúng.";
+                }
+                if (attempt < maxRetries) {
+                    await new Promise(r => setTimeout(r, 5000));
+                    continue;
+                }
+                return `Lỗi API (HTTP ${response.status}). Vui lòng thử lại sau.`;
+            }
+
+            const data = await response.json();
+            const summary = data.candidates?.[0]?.content?.parts?.[0]?.text || "Không thể tóm tắt.";
+            
+            window.taskSummaries[task.id] = summary.trim();
+            console.log(`[AI] Task #${task.id} - Tóm tắt thành công!`);
+            return window.taskSummaries[task.id];
+        } catch (e) {
+            console.error(`[AI] Task #${task.id} - Network error (attempt ${attempt + 1}):`, e);
+            if (attempt < maxRetries) {
+                await new Promise(r => setTimeout(r, 5000));
+                continue;
+            }
+            return `Lỗi kết nối mạng: ${e.message || 'Unknown'}`;
+        }
     }
+    return "Không thể tóm tắt sau nhiều lần thử.";
 }
 
 // ============================================================
@@ -1361,18 +1393,29 @@ async function showDoneTaskInfo() {
 
     // Trigger AI Summarization for missing summaries
     let hasNewSummaries = false;
+    const tasksToSummarize = tasks.filter(t => !window.taskSummaries[t.id]);
+    let currentIdx = 0;
+    
     for (const task of tasks) {
         if (!window.taskSummaries[task.id]) {
-            const summary = await summarizeTaskWithGemini(task);
+            currentIdx++;
+            // Update status indicator
             const tr = document.getElementById(`done-task-row-${task.id}`);
+            if (tr) {
+                tr.querySelector('.done-task-desc').innerHTML = `<span style="color:#8b5cf6;">⏳ AI đang tóm tắt (${currentIdx}/${tasksToSummarize.length})...</span>`;
+            }
+            
+            const summary = await summarizeTaskWithGemini(task);
             if (tr) {
                 tr.querySelector('.done-task-desc').innerHTML = summary.replace(/\n/g, '<br>');
             }
             if (window.taskSummaries[task.id]) {
                 hasNewSummaries = true;
             }
-            // Delay 4500ms between AI calls to avoid Google Rate Limits (15 RPM)
-            await new Promise(r => setTimeout(r, 4500));
+            // Delay 6000ms between AI calls to stay well within Google Rate Limits
+            if (currentIdx < tasksToSummarize.length) {
+                await new Promise(r => setTimeout(r, 6000));
+            }
         }
     }
 
