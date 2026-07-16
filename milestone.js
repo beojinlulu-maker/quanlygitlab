@@ -315,6 +315,7 @@ async function closeMilestone(msId) {
         labels: t.labels || [],
         assignees: t.assignees ? t.assignees.map(a => ({ username: a.username, name: a.name })) : [],
         author: t.author ? { username: t.author.username, name: t.author.name } : null,
+        description: t.description || '',
         created_at: t.created_at,
         closed_at: t.closed_at,
         web_url: t.web_url,
@@ -1238,7 +1239,15 @@ function showDoneTaskInfo() {
             const originalTitle = task.title || '';
             const viTitle = (window.taskTranslations && window.taskTranslations[originalTitle]) ? window.taskTranslations[originalTitle] : '';
             const displayTitle = viTitle ? viTitle : originalTitle;
-            const description = (task.description || '').replace(/\n/g, '<br>');
+            
+            let desc = task.description;
+            if (!desc) {
+                const liveTask = msState.allTasks.find(t => t.id === task.id);
+                if (liveTask && liveTask.description) {
+                    desc = liveTask.description;
+                }
+            }
+            const description = (desc || '').replace(/\n/g, '<br>');
 
             const tr = document.createElement('tr');
             tr.innerHTML = `
