@@ -1213,6 +1213,58 @@ function showStatusTasks(status) {
 }
 
 // ============================================================
+// DONE TASK INFO
+// ============================================================
+
+function showDoneTaskInfo() {
+    const msId = msState.currentMilestone;
+    if (!msId) {
+        alert("Vui lòng chọn một Milestone!");
+        return;
+    }
+    const ms = msState.milestones[msId];
+    const tasks = getMilestoneTasks().filter(t => getTaskStatus(t) === 'done');
+
+    document.getElementById('done-modal-ms-name').textContent = ms.name || '';
+    document.getElementById('done-modal-ms-end').textContent = ms.due_date ? formatDateVN(ms.due_date) : 'Không có';
+
+    const tbody = document.getElementById('done-modal-tbody');
+    tbody.innerHTML = '';
+
+    if (tasks.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; padding:12px;">Không có task hoàn thành nào trong milestone này.</td></tr>';
+    } else {
+        tasks.forEach((task, index) => {
+            const originalTitle = task.title || '';
+            const viTitle = (window.taskTranslations && window.taskTranslations[originalTitle]) ? window.taskTranslations[originalTitle] : '';
+            const displayTitle = viTitle ? viTitle : originalTitle;
+            const description = (task.description || '').replace(/\n/g, '<br>');
+
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td style="padding:10px; border:1px solid #e2e8f0; text-align:center;">${index + 1}</td>
+                <td style="padding:10px; border:1px solid #e2e8f0; font-weight: 500;">${displayTitle}</td>
+                <td style="padding:10px; border:1px solid #e2e8f0; font-size: 13px; color: #475569;">${description}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    document.getElementById('done-task-modal').style.display = 'flex';
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('btn-close-done-modal')?.addEventListener('click', () => {
+        document.getElementById('done-task-modal').style.display = 'none';
+    });
+    document.getElementById('done-task-modal')?.addEventListener('click', (e) => {
+        if (e.target.id === 'done-task-modal') {
+            document.getElementById('done-task-modal').style.display = 'none';
+        }
+    });
+});
+
+// ============================================================
 // COPY TO CLIPBOARD
 // ============================================================
 
@@ -1412,6 +1464,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     const btnCopyTable = document.getElementById('btn-copy-table');
     if (btnCopyTable) btnCopyTable.addEventListener('click', copyMilestoneTable);
+
+    const btnDoneInfo = document.getElementById('btn-done-task-info');
+    if (btnDoneInfo) btnDoneInfo.addEventListener('click', showDoneTaskInfo);
 
     document.getElementById('ms-select').addEventListener('change', (e) => {
         selectMilestone(e.target.value);
