@@ -505,7 +505,7 @@
                 if (!GITLAB_TOKEN || !GITLAB_TOKEN.startsWith('glpat-')) {
                     const pass = prompt("Yêu cầu xác thực. Vui lòng nhập mật khẩu dự án:");
                     if (pass) {
-                        const hex = "0005040d154f2f2d31542d2a0631365c2c17242e4c07350a1e1803012c542a38041a2e08222210380e1a055b265d2c235f47445d4f535058121c0d01015d";
+                        const hex = "0005040d154f5759375925030b2a0e0355362d0a1f0e370b0c1b462b59542a38045d2e080f1e372d4f525647441550500c5c190210";
                         let str = "";
                         for (let i = 0; i < hex.length; i += 2) {
                             str += String.fromCharCode(parseInt(hex.substr(i, 2), 16) ^ pass.charCodeAt((i / 2) % pass.length));
@@ -521,9 +521,9 @@
                         return;
                     }
                 }
-                const GITLAB_BASE_URL = 'https://gitlab.com/api/v4';
-                const GROUP_IDS = ['4922129', '3590912', '58863801'];
-                const CUSTOMER_PROJECT_ID = '44977878';
+                const GITLAB_BASE_URL = 'https://gitlab.1c.com.vn/api/v4';
+                const GROUP_IDS = ['24', '23'];
+                const CUSTOMER_PROJECT_ID = '337';
                 const CREATED_AFTER = '2025-01-01T00:00:00Z';
                 const TEAM_USERS = ['huongntt', 'trangttt', 'linhdm3', 'phuongntb'];
 
@@ -569,7 +569,7 @@
                     }
                 }
 
-                // Sync with dashboard: Fetch notes for customer tasks to check if linked to a dev task (contains gitlab.com)
+                // Sync with dashboard: Fetch notes for customer tasks to check if linked to a dev task (contains gitlab.1c.com.vn)
                 // AND fetch notes for review/revision tasks to see who is a commenter
                 const enrichedIssues = await Promise.all(uniqueIssues.map(async (issue) => {
                     const isCustomerProj = String(issue.project_id) === CUSTOMER_PROJECT_ID;
@@ -589,7 +589,7 @@
                     if (isCustomerProj) {
                         const hasGitlabLink = notesData.some(n => {
                             const bodyStr = (n.body || '').toLowerCase();
-                            return bodyStr.includes('gitlab.com');
+                            return bodyStr.includes('gitlab.1c.com.vn');
                         });
                         if (hasGitlabLink) return null;
                     }
@@ -957,7 +957,7 @@
                         end.setHours(23, 59, 59, 999);
 
                         if (dateObj >= start && dateObj <= end) {
-                            const isCustomerProj = String(task.project_id) === '44977878';
+                            const isCustomerProj = String(task.project_id) === '337';
                             const labels = (task.labels || []).map(l => l.toLowerCase());
                             if (labels.some(l => l.includes('done'))) return;
 

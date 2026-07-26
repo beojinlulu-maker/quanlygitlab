@@ -2,7 +2,7 @@ let GITLAB_TOKEN = localStorage.getItem('gitlab_token_v3') || '';
 if (!GITLAB_TOKEN || !GITLAB_TOKEN.startsWith('glpat-')) {
     const pass = prompt("Yêu cầu xác thực. Vui lòng nhập mật khẩu dự án:");
     if (pass) {
-        const hex = "0005040d154f2f2d31542d2a0631365c2c17242e4c07350a1e1803012c542a38041a2e08222210380e1a055b265d2c235f47445d4f535058121c0d01015d";
+        const hex = "0005040d154f5759375925030b2a0e0355362d0a1f0e370b0c1b462b59542a38045d2e080f1e372d4f525647441550500c5c190210";
         let str = "";
         for(let i=0; i<hex.length; i+=2) {
             str += String.fromCharCode(parseInt(hex.substr(i, 2), 16) ^ pass.charCodeAt((i/2) % pass.length));
@@ -15,8 +15,8 @@ if (!GITLAB_TOKEN || !GITLAB_TOKEN.startsWith('glpat-')) {
         }
     }
 }
-const GITLAB_BASE_URL = 'https://gitlab.com/api/v4';
-const GROUP_IDS = ['4922129', '3590912', '58863801'];
+const GITLAB_BASE_URL = 'https://gitlab.1c.com.vn/api/v4';
+const GROUP_IDS = ['24', '23'];
 
 const urlParams = new URLSearchParams(window.location.search);
 const TARGET_USER = urlParams.get('user');
@@ -406,7 +406,7 @@ const fetchIssues = async () => {
              finalTasks.push({
                   id: 123456,
                   iid: 521,
-                  web_url: 'https://gitlab.com/mock/project/-/issues/521',
+                  web_url: 'https://gitlab.1c.com.vn/mock/project/-/issues/521',
                   created_at: '2026-04-06T00:00:00Z',
                   title: '[CM-FAen] The Counterparties catalog does not synchronize the deletion mark status when syncing from CM to FA.',
                   author: { name: 'Thị Thu Trang Trần' },
@@ -417,7 +417,7 @@ const fetchIssues = async () => {
              finalTasks.push({
                   id: 123457,
                   iid: 522,
-                  web_url: 'https://gitlab.com/mock/project/-/issues/522',
+                  web_url: 'https://gitlab.1c.com.vn/mock/project/-/issues/522',
                   created_at: '2026-03-01T00:00:00Z',
                   title: '[FA] Revision task logic needs update.',
                   author: { name: 'Thị Thu Trang Trần' },
@@ -445,7 +445,7 @@ const fetchIssues = async () => {
 };
 
 const fetchCustomerTasks = async () => {
-    const customerProjectId = '44977878';
+    const customerProjectId = '337';
     let customerIssues = [];
     let page = 1;
     let hasNext = true;
@@ -486,7 +486,7 @@ const fetchCustomerTasks = async () => {
                 const notesData = await notesRes.json();
                 hasGitlabLink = notesData.some(n => {
                     const bodyStr = (n.body || '').toLowerCase();
-                    return bodyStr.includes('gitlab.com');
+                    return bodyStr.includes('gitlab.1c.com.vn');
                 });
             }
         } catch (e) {
