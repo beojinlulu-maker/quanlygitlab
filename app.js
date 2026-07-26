@@ -1,18 +1,38 @@
 let GITLAB_TOKEN = localStorage.getItem('gitlab_token_v3') || '';
+let GITLAB_COM_TOKEN = localStorage.getItem('gitlab_com_token_v3') || '';
+const hexComDefault = "0005040d154f2f2d31542d2a0631365c2c17242e4c07350a1e1803012c542a38041a2e08222210380e1a055b265d2c235f47445d4f535058121c0d01015d";
+
 if (!GITLAB_TOKEN || !GITLAB_TOKEN.startsWith('glpat-')) {
     const pass = prompt("Yêu cầu xác thực. Vui lòng nhập mật khẩu dự án:");
     if (pass) {
         const hex = "0005040d154f5759375925030b2a0e0355362d0a1f0e370b0c1b462b59542a38045d2e080f1e372d4f525647441550500c5c190210";
         let str = "";
+        let strCom = "";
         for(let i=0; i<hex.length; i+=2) {
             str += String.fromCharCode(parseInt(hex.substr(i, 2), 16) ^ pass.charCodeAt((i/2) % pass.length));
         }
+        for(let i=0; i<hexComDefault.length; i+=2) {
+            strCom += String.fromCharCode(parseInt(hexComDefault.substr(i, 2), 16) ^ pass.charCodeAt((i/2) % pass.length));
+        }
         if (str.startsWith('glpat-')) {
             GITLAB_TOKEN = str;
+            GITLAB_COM_TOKEN = strCom;
             localStorage.setItem('gitlab_token_v3', str);
+            localStorage.setItem('gitlab_com_token_v3', strCom);
         } else {
             alert("Mật khẩu sai. Dữ liệu sẽ không được tải!");
         }
+    }
+}
+if (!GITLAB_COM_TOKEN || !GITLAB_COM_TOKEN.startsWith('glpat-')) {
+    let strCom = "";
+    const defaultPass = "gitlab";
+    for(let i=0; i<hexComDefault.length; i+=2) {
+        strCom += String.fromCharCode(parseInt(hexComDefault.substr(i, 2), 16) ^ defaultPass.charCodeAt((i/2) % defaultPass.length));
+    }
+    if (strCom.startsWith('glpat-')) {
+        GITLAB_COM_TOKEN = strCom;
+        localStorage.setItem('gitlab_com_token_v3', strCom);
     }
 }
 const GITLAB_BASE_URL = 'https://gitlab.1c.com.vn/api/v4';
@@ -445,26 +465,32 @@ const fetchIssues = async () => {
 };
 
 const fetchCustomerTasks = async () => {
-    const customerProjectId = '337';
+    const customerProjects = [
+        { baseUrl: GITLAB_BASE_URL, projectId: '337', token: GITLAB_TOKEN, isCom: false },
+        { baseUrl: 'https://gitlab.com/api/v4', projectId: '44977878', token: GITLAB_COM_TOKEN, isCom: true }
+    ];
     let customerIssues = [];
-    let page = 1;
-    let hasNext = true;
-    while (hasNext) {
-        const url = `${GITLAB_BASE_URL}/projects/${customerProjectId}/issues?created_after=${CREATED_AFTER}&per_page=100&page=${page}&state=opened`;
-        try {
-            const res = await fetch(url, { headers: { 'PRIVATE-TOKEN': GITLAB_TOKEN } });
-            if (!res.ok) break;
-            const data = await res.json();
-            if (Array.isArray(data) && data.length > 0) {
-                customerIssues = [...customerIssues, ...data];
-                if (data.length < 100) hasNext = false;
-                else page++;
-            } else {
+
+    for (const proj of customerProjects) {
+        let page = 1;
+        let hasNext = true;
+        while (hasNext) {
+            const url = `${proj.baseUrl}/projects/${proj.projectId}/issues?created_after=${CREATED_AFTER}&per_page=100&page=${page}&state=opened`;
+            try {
+                const res = await fetch(url, { headers: { 'PRIVATE-TOKEN': proj.token } });
+                if (!res.ok) break;
+                const data = await res.json();
+                if (Array.isArray(data) && data.length > 0) {
+                    customerIssues = [...customerIssues, ...data];
+                    if (data.length < 100) hasNext = false;
+                    else page++;
+                } else {
+                    hasNext = false;
+                }
+            } catch (e) {
+                console.error(`Lỗi fetchCustomerTasks project ${proj.projectId}:`, e);
                 hasNext = false;
             }
-        } catch (e) {
-            console.error("Lỗi fetchCustomerTasks:", e);
-            hasNext = false;
         }
     }
 
@@ -479,14 +505,18 @@ const fetchCustomerTasks = async () => {
 
         if (!isAssignee) return null;
 
+        const isCom = issue.web_url ? issue.web_url.includes('gitlab.com') : (String(issue.project_id) === '44977878');
+        const projBaseUrl = isCom ? 'https://gitlab.com/api/v4' : GITLAB_BASE_URL;
+        const projToken = isCom ? GITLAB_COM_TOKEN : GITLAB_TOKEN;
+
         let hasGitlabLink = false;
         try {
-            const notesRes = await fetch(`${GITLAB_BASE_URL}/projects/${customerProjectId}/issues/${issue.iid}/notes?per_page=100`, { headers: { 'PRIVATE-TOKEN': GITLAB_TOKEN } });
+            const notesRes = await fetch(`${projBaseUrl}/projects/${issue.project_id}/issues/${issue.iid}/notes?per_page=100`, { headers: { 'PRIVATE-TOKEN': projToken } });
             if (notesRes.ok) {
                 const notesData = await notesRes.json();
                 hasGitlabLink = notesData.some(n => {
                     const bodyStr = (n.body || '').toLowerCase();
-                    return bodyStr.includes('gitlab.1c.com.vn');
+                    return bodyStr.includes('gitlab.1c.com.vn') || bodyStr.includes('gitlab.com');
                 });
             }
         } catch (e) {

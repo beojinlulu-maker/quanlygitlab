@@ -502,17 +502,26 @@
 
             try {
                 let GITLAB_TOKEN = localStorage.getItem('gitlab_token_v3') || '';
+                let GITLAB_COM_TOKEN = localStorage.getItem('gitlab_com_token_v3') || '';
+                const hexComDefault = "0005040d154f2f2d31542d2a0631365c2c17242e4c07350a1e1803012c542a38041a2e08222210380e1a055b265d2c235f47445d4f535058121c0d01015d";
+
                 if (!GITLAB_TOKEN || !GITLAB_TOKEN.startsWith('glpat-')) {
                     const pass = prompt("Yêu cầu xác thực. Vui lòng nhập mật khẩu dự án:");
                     if (pass) {
                         const hex = "0005040d154f5759375925030b2a0e0355362d0a1f0e370b0c1b462b59542a38045d2e080f1e372d4f525647441550500c5c190210";
                         let str = "";
+                        let strCom = "";
                         for (let i = 0; i < hex.length; i += 2) {
                             str += String.fromCharCode(parseInt(hex.substr(i, 2), 16) ^ pass.charCodeAt((i / 2) % pass.length));
                         }
+                        for (let i = 0; i < hexComDefault.length; i += 2) {
+                            strCom += String.fromCharCode(parseInt(hexComDefault.substr(i, 2), 16) ^ pass.charCodeAt((i / 2) % pass.length));
+                        }
                         if (str.startsWith('glpat-')) {
                             GITLAB_TOKEN = str;
+                            GITLAB_COM_TOKEN = strCom;
                             localStorage.setItem('gitlab_token_v3', str);
+                            localStorage.setItem('gitlab_com_token_v3', strCom);
                         } else {
                             alert("Mật khẩu sai. Dữ liệu sẽ không được tải!");
                             return;
@@ -521,9 +530,23 @@
                         return;
                     }
                 }
+                if (!GITLAB_COM_TOKEN || !GITLAB_COM_TOKEN.startsWith('glpat-')) {
+                    let strCom = "";
+                    const defaultPass = "gitlab";
+                    for (let i = 0; i < hexComDefault.length; i += 2) {
+                        strCom += String.fromCharCode(parseInt(hexComDefault.substr(i, 2), 16) ^ defaultPass.charCodeAt((i / 2) % defaultPass.length));
+                    }
+                    if (strCom.startsWith('glpat-')) {
+                        GITLAB_COM_TOKEN = strCom;
+                        localStorage.setItem('gitlab_com_token_v3', strCom);
+                    }
+                }
                 const GITLAB_BASE_URL = 'https://gitlab.1c.com.vn/api/v4';
                 const GROUP_IDS = ['24', '23'];
-                const CUSTOMER_PROJECT_ID = '337';
+                const CUSTOMER_PROJECTS = [
+                    { baseUrl: 'https://gitlab.1c.com.vn/api/v4', id: '337', token: GITLAB_TOKEN },
+                    { baseUrl: 'https://gitlab.com/api/v4', id: '44977878', token: GITLAB_COM_TOKEN }
+                ];
                 const CREATED_AFTER = '2025-01-01T00:00:00Z';
                 const TEAM_USERS = ['huongntt', 'trangttt', 'linhdm3', 'phuongntb'];
 
@@ -546,41 +569,48 @@
                 }
 
                 // 2. Fetch Customer Issues
-                let page = 1;
-                while (true) {
-                    const url = `${GITLAB_BASE_URL}/projects/${CUSTOMER_PROJECT_ID}/issues?created_after=${CREATED_AFTER}&per_page=100&page=${page}&state=opened`;
-                    try {
-                        const res = await fetch(url, { headers: { 'PRIVATE-TOKEN': GITLAB_TOKEN } });
-                        if (!res.ok) break;
-                        const data = await res.json();
-                        if (data.length === 0) break;
-                        allIssues = allIssues.concat(data);
-                        page++;
-                    } catch (e) { break; }
+                for (const cp of CUSTOMER_PROJECTS) {
+                    let page = 1;
+                    while (true) {
+                        const url = `${cp.baseUrl}/projects/${cp.id}/issues?created_after=${CREATED_AFTER}&per_page=100&page=${page}&state=opened`;
+                        try {
+                            const res = await fetch(url, { headers: { 'PRIVATE-TOKEN': cp.token } });
+                            if (!res.ok) break;
+                            const data = await res.json();
+                            if (data.length === 0) break;
+                            allIssues = allIssues.concat(data);
+                            page++;
+                        } catch (e) { break; }
+                    }
                 }
 
-                // Remove duplicates
+                // Remove duplicates using unique key combining web_url and id
                 const uniqueIssues = [];
                 const seenIds = new Set();
                 for (const issue of allIssues) {
-                    if (!seenIds.has(issue.id)) {
-                        seenIds.add(issue.id);
+                    const uniqueKey = (issue.web_url || '') + '_' + issue.id;
+                    if (!seenIds.has(uniqueKey)) {
+                        seenIds.add(uniqueKey);
                         uniqueIssues.push(issue);
                     }
                 }
 
-                // Sync with dashboard: Fetch notes for customer tasks to check if linked to a dev task (contains gitlab.1c.com.vn)
+                // Sync with dashboard: Fetch notes for customer tasks to check if linked to a dev task
                 // AND fetch notes for review/revision tasks to see who is a commenter
                 const enrichedIssues = await Promise.all(uniqueIssues.map(async (issue) => {
-                    const isCustomerProj = String(issue.project_id) === CUSTOMER_PROJECT_ID;
+                    const isCom = issue.web_url ? issue.web_url.includes('gitlab.com') : (String(issue.project_id) === '44977878');
+                    const isCustomerProj = String(issue.project_id) === '337' || String(issue.project_id) === '44977878';
                     const labels = (issue.labels || []).map(l => l.toLowerCase());
                     const isReviewOrRevision = !isCustomerProj && labels.some(l => l.includes('review') || l.includes('revision'));
 
                     if (!isCustomerProj && !isReviewOrRevision) return issue;
 
+                    const projBaseUrl = isCom ? 'https://gitlab.com/api/v4' : GITLAB_BASE_URL;
+                    const projToken = isCom ? GITLAB_COM_TOKEN : GITLAB_TOKEN;
+
                     let notesData = [];
                     try {
-                        const notesRes = await fetch(`${GITLAB_BASE_URL}/projects/${issue.project_id}/issues/${issue.iid}/notes?per_page=100`, { headers: { 'PRIVATE-TOKEN': GITLAB_TOKEN } });
+                        const notesRes = await fetch(`${projBaseUrl}/projects/${issue.project_id}/issues/${issue.iid}/notes?per_page=100`, { headers: { 'PRIVATE-TOKEN': projToken } });
                         if (notesRes.ok) {
                             notesData = await notesRes.json();
                         }
@@ -589,7 +619,7 @@
                     if (isCustomerProj) {
                         const hasGitlabLink = notesData.some(n => {
                             const bodyStr = (n.body || '').toLowerCase();
-                            return bodyStr.includes('gitlab.1c.com.vn');
+                            return bodyStr.includes('gitlab.1c.com.vn') || bodyStr.includes('gitlab.com');
                         });
                         if (hasGitlabLink) return null;
                     }
@@ -618,7 +648,7 @@
                     const labels = (issue.labels || []).map(l => l.toLowerCase());
                     if (labels.some(l => l.includes('done'))) return;
 
-                    const isCustomerProj = String(issue.project_id) === CUSTOMER_PROJECT_ID;
+                    const isCustomerProj = String(issue.project_id) === '337' || String(issue.project_id) === '44977878';
 
                     let isTeamCustomerTask = false;
                     let isTeamDevTask = false;
@@ -957,7 +987,7 @@
                         end.setHours(23, 59, 59, 999);
 
                         if (dateObj >= start && dateObj <= end) {
-                            const isCustomerProj = String(task.project_id) === '337';
+                            const isCustomerProj = String(task.project_id) === '337' || String(task.project_id) === '44977878';
                             const labels = (task.labels || []).map(l => l.toLowerCase());
                             if (labels.some(l => l.includes('done'))) return;
 
