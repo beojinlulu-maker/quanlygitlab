@@ -1029,7 +1029,44 @@
                     </div>
                 </div>
 
-                <!-- 3.6 Tasks in Milestone -->
+                <!-- 3.5.6 E-Invoice Done Tasks -->
+                <div class="ms-task-panel" id="einvoice-done-panel" style="display:none; margin-bottom: 24px;">
+                    <div class="ms-task-panel-header" style="background: linear-gradient(90deg, #0f766e 0%, #0d9488 100%); border-bottom: 1px solid #0f766e;">
+                        <div class="ms-task-panel-header-left">
+                            <i data-lucide="file-check-2" style="width:20px;height:20px; color: #5eead4;"></i>
+                            <span style="color: white;">DANH SÁCH TASK HOÁ ĐƠN ĐIỆN TỬ DONE TRONG MILESTONE</span>
+                            <span id="einvoice-done-count" class="count-badge" style="background: rgba(255,255,255,0.2); color: white;">0</span>
+                        </div>
+                        <button id="btn-add-einvoice-done-to-ms" class="btn-primary" style="background: #14b8a6; border-color: #0d9488;" disabled>
+                            <i data-lucide="plus-circle" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i>
+                            Thêm vào Milestone
+                        </button>
+                    </div>
+                    <div class="ms-table-container">
+                        <table class="ms-table">
+                            <thead>
+                                <tr>
+                                    <th style="width:40px; text-align:center;">
+                                        <input type="checkbox" id="einvoice-done-select-all">
+                                    </th>
+                                    <th class="col-stt">ID</th>
+                                    <th>TASK / TITLE</th>
+                                    <th style="width:140px;">ASSIGNEE</th>
+                                    <th style="width:140px;">AUTHOR</th>
+                                    <th style="width:120px;">LABELS</th>
+                                    <th style="width:140px;">NGÀY DONE (F&A)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="einvoice-done-tbody">
+                                <!-- Populated by JS -->
+                            </tbody>
+                        </table>
+                        <div id="einvoice-done-empty" class="empty-state hidden">
+                            <i data-lucide="inbox" style="width:48px;height:48px;color:#cbd5e1;margin-bottom:12px;"></i>
+                            <p style="margin:0;color:#64748b;font-weight:500;">Không có task hoá đơn điện tử DONE (F&A) nào trong khoảng thời gian này.</p>
+                        </div>
+                    </div>
+                </div>
                 <div class="ms-task-panel">
                     <div class="ms-task-panel-header">
                         <div class="ms-task-panel-header-left">

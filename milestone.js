@@ -24,16 +24,18 @@ if (!GITLAB_TOKEN || !GITLAB_TOKEN.startsWith('glpat-')) {
 // --- Constants ---
 const GITLAB_BASE_URL = 'https://gitlab.1c.com.vn/api/v4';
 const PROJECT_ID = '39';
+const EINVOICE_PROJECT_ID = '101';
 const TEAM_USERS = ['huongntt', 'trangttt', 'linhdm3', 'phuongntb'];
 const TEAM_NAMES = { huongntt: 'Hường', trangttt: 'Trang', linhdm3: 'Linh', phuongntb: 'Phương N.' };
 
 // --- State ---
 const msState = {
-    allTasks: [],           // All fetched tasks from GitLab (opened + closed)
+    allTasks: [],           // All fetched tasks from GitLab (opened + closed, Project 39 + 101)
     milestones: {},         // { msId: { name, startDate, endDate, taskIds: [] } }
     currentMilestone: null, // currently selected milestone ID
     selectedTaskIds: new Set(),     // checkboxes for unassigned table
     selectedDoneTaskIds: new Set(), // checkboxes for done unassigned table
+    selectedEinvoiceDoneTaskIds: new Set(), // checkboxes for einvoice done table
     selectedMsTaskIds: new Set(),   // checkboxes for milestone task table
     charts: { burndown: null, pie: null, bar: null }
 };
@@ -130,45 +132,78 @@ async function fetchProjectTasks() {
     msState.allTasks = [];
     const headers = { 'PRIVATE-TOKEN': GITLAB_TOKEN };
 
-    // Fetch opened issues
-    let page = 1;
-    let hasMore = true;
-    while (hasMore) {
-        try {
-            const res = await fetch(`${GITLAB_BASE_URL}/projects/${PROJECT_ID}/issues?state=opened&per_page=100&page=${page}`, { headers });
-            if (!res.ok) break;
-            const data = await res.json();
-            if (data.length === 0) { hasMore = false; break; }
-            msState.allTasks.push(...data);
-            page++;
-            if (data.length < 100) hasMore = false;
-        } catch (e) {
-            console.error('Error fetching opened issues page ' + page, e);
-            hasMore = false;
+    // 1. Fetch opened & closed issues for Project 39 (Main Project)
+    for (const stateParam of ['opened', 'closed']) {
+        let page = 1;
+        let hasMore = true;
+        while (hasMore) {
+            try {
+                const res = await fetch(`${GITLAB_BASE_URL}/projects/${PROJECT_ID}/issues?state=${stateParam}&per_page=100&page=${page}`, { headers });
+                if (!res.ok) break;
+                const data = await res.json();
+                if (data.length === 0) { hasMore = false; break; }
+                data.forEach(t => { t.project_id = t.project_id || PROJECT_ID; });
+                msState.allTasks.push(...data);
+                page++;
+                if (data.length < 100) hasMore = false;
+            } catch (e) {
+                console.error(`Error fetching ${stateParam} issues for project 39 page ${page}`, e);
+                hasMore = false;
+            }
         }
     }
 
-    // Fetch closed issues (for burndown data)
-    page = 1;
-    hasMore = true;
-    while (hasMore) {
-        try {
-            const res = await fetch(`${GITLAB_BASE_URL}/projects/${PROJECT_ID}/issues?state=closed&per_page=100&page=${page}`, { headers });
-            if (!res.ok) break;
-            const data = await res.json();
-            if (data.length === 0) { hasMore = false; break; }
-            msState.allTasks.push(...data);
-            page++;
-            if (data.length < 100) hasMore = false;
-        } catch (e) {
-            console.error('Error fetching closed issues page ' + page, e);
-            hasMore = false;
+    // 2. Fetch opened & closed issues for Project 101 (1C:E-Invoice)
+    const einvoiceIssues = [];
+    for (const stateParam of ['opened', 'closed']) {
+        let page = 1;
+        let hasMore = true;
+        while (hasMore) {
+            try {
+                const res = await fetch(`${GITLAB_BASE_URL}/projects/${EINVOICE_PROJECT_ID}/issues?state=${stateParam}&per_page=100&page=${page}`, { headers });
+                if (!res.ok) break;
+                const data = await res.json();
+                if (data.length === 0) { hasMore = false; break; }
+                data.forEach(t => {
+                    t.project_id = 101;
+                    if (!t.web_url) {
+                        t.web_url = `https://gitlab.1c.com.vn/1c_vietnam/develop_software/e-invoices/-/work_items/${t.iid}`;
+                    }
+                });
+                einvoiceIssues.push(...data);
+                page++;
+                if (data.length < 100) hasMore = false;
+            } catch (e) {
+                console.error(`Error fetching ${stateParam} issues for project 101 page ${page}`, e);
+                hasMore = false;
+            }
         }
     }
 
-    // Filter out tasks with label exactly 'Done' (case insensitive) from the main view
-    // but keep them in allTasks for status counting
-    console.log(`Fetched ${msState.allTasks.length} total issues from GitLab`);
+    // Enrich Project 101 issues that have label 'DONE (F&A)' with resource_label_events
+    const doneFAIssues = einvoiceIssues.filter(i => (i.labels || []).some(l => l.toLowerCase() === 'done (f&a)'));
+    await Promise.all(doneFAIssues.map(async i => {
+        try {
+            const evRes = await fetch(`${GITLAB_BASE_URL}/projects/${EINVOICE_PROJECT_ID}/issues/${i.iid}/resource_label_events`, { headers });
+            if (evRes.ok) {
+                const events = await evRes.json();
+                if (Array.isArray(events)) {
+                    const addEvents = events.filter(e => e.action === 'add' && e.label && e.label.name && e.label.name.toLowerCase() === 'done (f&a)');
+                    if (addEvents.length > 0) {
+                        addEvents.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+                        i.doneFA_date = addEvents[0].created_at;
+                    }
+                }
+            }
+        } catch (e) { }
+        if (!i.doneFA_date) {
+            i.doneFA_date = i.closed_at || i.updated_at || i.created_at;
+        }
+    }));
+
+    msState.allTasks.push(...einvoiceIssues);
+
+    console.log(`Fetched ${msState.allTasks.length} total issues from GitLab (Project 39: ${msState.allTasks.length - einvoiceIssues.length}, Project 101: ${einvoiceIssues.length})`);
 }
 
 // ============================================================
@@ -395,11 +430,15 @@ function selectMilestone(msId) {
         document.getElementById('unassigned-panel').style.display = 'block';
         const donePanel = document.getElementById('done-unassigned-panel');
         if(donePanel) donePanel.style.display = 'block';
+        const einvoicePanel = document.getElementById('einvoice-done-panel');
+        if(einvoicePanel) einvoicePanel.style.display = 'block';
         
         renderUnassignedTasks();
         if(typeof renderDoneUnassignedTasks === 'function') renderDoneUnassignedTasks();
+        if(typeof renderEinvoiceDoneTasks === 'function') renderEinvoiceDoneTasks();
         updateAddButtonState();
         if(typeof updateAddDoneButtonState === 'function') updateAddDoneButtonState();
+        if(typeof updateAddEinvoiceDoneButtonState === 'function') updateAddEinvoiceDoneButtonState();
         
         // Let updateRemoveButtonState handle btn-remove-from-ms disabled status based on selections
         updateRemoveButtonState();
@@ -433,6 +472,7 @@ async function addSelectedToMilestone() {
 
     renderUnassignedTasks();
     if(typeof renderDoneUnassignedTasks === 'function') renderDoneUnassignedTasks();
+    if(typeof renderEinvoiceDoneTasks === 'function') renderEinvoiceDoneTasks();
     renderMilestoneOverview();
     updateAddButtonState();
 }
@@ -459,8 +499,36 @@ async function addSelectedDoneToMilestone() {
 
     renderUnassignedTasks();
     if(typeof renderDoneUnassignedTasks === 'function') renderDoneUnassignedTasks();
+    if(typeof renderEinvoiceDoneTasks === 'function') renderEinvoiceDoneTasks();
     renderMilestoneOverview();
     if(typeof updateAddDoneButtonState === 'function') updateAddDoneButtonState();
+}
+
+async function addSelectedEinvoiceDoneToMilestone() {
+    if (!msState.currentMilestone || msState.selectedEinvoiceDoneTaskIds.size === 0) return;
+
+    const ms = msState.milestones[msState.currentMilestone];
+    if (!ms) return;
+
+    const taskIds = ms.taskIds || [];
+    msState.selectedEinvoiceDoneTaskIds.forEach(id => {
+        if (!taskIds.includes(String(id))) {
+            taskIds.push(String(id));
+        }
+    });
+
+    ms.taskIds = taskIds;
+    await saveMilestoneToFirestore(msState.currentMilestone, ms);
+
+    msState.selectedEinvoiceDoneTaskIds.clear();
+    const selectAllCb = document.getElementById('einvoice-done-select-all');
+    if (selectAllCb) selectAllCb.checked = false;
+
+    renderUnassignedTasks();
+    if(typeof renderDoneUnassignedTasks === 'function') renderDoneUnassignedTasks();
+    if(typeof renderEinvoiceDoneTasks === 'function') renderEinvoiceDoneTasks();
+    renderMilestoneOverview();
+    if(typeof updateAddEinvoiceDoneButtonState === 'function') updateAddEinvoiceDoneButtonState();
 }
 
 async function removeSelectedFromMilestone() {
@@ -478,6 +546,7 @@ async function removeSelectedFromMilestone() {
 
     renderUnassignedTasks();
     if(typeof renderDoneUnassignedTasks === 'function') renderDoneUnassignedTasks();
+    if(typeof renderEinvoiceDoneTasks === 'function') renderEinvoiceDoneTasks();
     renderMilestoneOverview();
     updateRemoveButtonState();
 }
@@ -591,6 +660,7 @@ function renderUnassignedTasks() {
 
     // Filter: only opened tasks not in any milestone, and not labeled 'Done'
     let unassigned = msState.allTasks.filter(t => {
+        if (String(t.project_id) === '101') return false;
         if (t.state !== 'opened') return false;
         if (assignedIds.has(String(t.id))) return false;
         const labels = (t.labels || []).map(l => l.toLowerCase());
@@ -693,6 +763,7 @@ function renderDoneUnassignedTasks() {
     const assignedIds = getAllAssignedTaskIds();
 
     let doneUnassigned = msState.allTasks.filter(t => {
+        if (String(t.project_id) === '101') return false;
         if (assignedIds.has(String(t.id))) return false;
         
         const labels = (t.labels || []).map(l => l.toLowerCase());
@@ -761,6 +832,104 @@ function renderDoneUnassignedTasks() {
     });
 
     lucide.createIcons();
+}
+
+function renderEinvoiceDoneTasks() {
+    const tbody = document.getElementById('einvoice-done-tbody');
+    const emptyState = document.getElementById('einvoice-done-empty');
+    const countEl = document.getElementById('einvoice-done-count');
+    const panel = document.getElementById('einvoice-done-panel');
+    
+    if (!tbody || !emptyState || !countEl || !panel) return;
+
+    const ms = msState.currentMilestone ? msState.milestones[msState.currentMilestone] : null;
+    
+    if (!ms) {
+        tbody.innerHTML = '';
+        emptyState.classList.remove('hidden');
+        countEl.textContent = '0';
+        panel.style.display = 'none';
+        return;
+    }
+
+    panel.style.display = 'block';
+    
+    let msStart = new Date(ms.startDate).setHours(0, 0, 0, 0);
+    let msEnd = new Date(ms.endDate).setHours(23, 59, 59, 999);
+    
+    const assignedIds = getAllAssignedTaskIds();
+
+    let einvoiceDone = msState.allTasks.filter(t => {
+        if (String(t.project_id) !== '101') return false;
+        if (assignedIds.has(String(t.id))) return false;
+        
+        const labels = (t.labels || []).map(l => l.toLowerCase());
+        const hasDoneFA = labels.includes('done (f&a)');
+        
+        if (hasDoneFA) {
+            const taskDateStr = t.doneFA_date || t.closed_at || t.updated_at || t.created_at;
+            const taskTime = new Date(taskDateStr).getTime();
+            return taskTime >= msStart && taskTime <= msEnd;
+        }
+        
+        return false;
+    });
+
+    countEl.textContent = einvoiceDone.length;
+
+    if (einvoiceDone.length === 0) {
+        tbody.innerHTML = '';
+        emptyState.classList.remove('hidden');
+        return;
+    }
+
+    emptyState.classList.add('hidden');
+    tbody.innerHTML = '';
+
+    einvoiceDone.forEach(task => {
+        const tr = document.createElement('tr');
+        const taskId = String(task.id);
+        const isChecked = msState.selectedEinvoiceDoneTaskIds.has(taskId);
+
+        const assigneesHtml = (task.assignees || [])
+            .map(a => `<span class="ms-assignee-badge">${TEAM_NAMES[a.username] || a.username || a.name}</span>`)
+            .join('') || '<span style="color:#94a3b8;font-size:11px;">—</span>';
+
+        const labelsHtml = (task.labels || [])
+            .map(l => {
+                let cls = 'ms-label-badge';
+                if (l.toLowerCase().includes('revision')) cls += ' revision';
+                else if (l.toLowerCase().includes('bug')) cls += ' bug';
+                else if (l.toLowerCase().includes('done')) cls += ' done';
+                return `<span class="${cls}">${l}</span>`;
+            })
+            .join('') || '<span style="color:#94a3b8;font-size:11px;">—</span>';
+
+        const webUrl = task.web_url || `https://gitlab.1c.com.vn/1c_vietnam/develop_software/e-invoices/-/work_items/${task.iid}`;
+        const statusBadge = '<span style="background:#ccfbf1;color:#0f766e;font-size:9px;font-weight:800;padding:2px 8px;border-radius:100px;border:1px solid #99f6e4;text-transform:uppercase;margin-left:6px;">✓ DONE (F&A)</span>';
+        
+        tr.style.background = '#f0fdfa';
+        
+        const authorHtml = task.author ? `<span class="ms-assignee-badge" style="background:#e2e8f0; color:#475569; border:none;">${TEAM_NAMES[task.author.username] || task.author.username || task.author.name}</span>` : '<span style="color:#94a3b8;font-size:11px;">—</span>';
+        const displayDate = task.doneFA_date || task.closed_at || task.updated_at || task.created_at;
+
+        tr.innerHTML = `
+            <td style="text-align:center;"><input type="checkbox" data-task-id="${taskId}" ${isChecked ? 'checked' : ''}></td>
+            <td class="cell-stt"><a href="${webUrl}" target="_blank" class="ms-task-link">#${task.iid || task.id}</a></td>
+            <td style="font-size:13px;font-weight:500;color:#1e293b;line-height:1.5;">${formatTaskTitle(task)}${statusBadge}</td>
+            <td>${assigneesHtml}</td>
+            <td>${authorHtml}</td>
+            <td>${labelsHtml}</td>
+            <td class="ms-date-cell">${formatDateVN(displayDate)}</td>
+        `;
+
+        const cb = tr.querySelector('input[type="checkbox"]');
+        cb.addEventListener('change', onEinvoiceDoneCheckboxChange);
+
+        tbody.appendChild(tr);
+    });
+
+    if (window.lucide) lucide.createIcons();
 }
 
 
@@ -1743,6 +1912,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Re-render to show translations
         renderUnassignedTasks();
         if(typeof renderDoneUnassignedTasks === 'function') renderDoneUnassignedTasks();
+        if(typeof renderEinvoiceDoneTasks === 'function') renderEinvoiceDoneTasks();
         if (msState.currentMilestone) {
             renderMsTaskTable();
         }
@@ -1779,6 +1949,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     const btnAddDone = document.getElementById('btn-add-done-to-ms');
     if (btnAddDone) btnAddDone.addEventListener('click', addSelectedDoneToMilestone);
+
+    const selectAllEinvoiceDone = document.getElementById('einvoice-done-select-all');
+    if (selectAllEinvoiceDone) selectAllEinvoiceDone.addEventListener('change', toggleEinvoiceDoneSelectAll);
+
+    const btnAddEinvoiceDone = document.getElementById('btn-add-einvoice-done-to-ms');
+    if (btnAddEinvoiceDone) btnAddEinvoiceDone.addEventListener('click', addSelectedEinvoiceDoneToMilestone);
 
     const selectAllMs = document.getElementById('select-all-ms-checkbox');
     if (selectAllMs) selectAllMs.addEventListener('change', toggleSelectAllMs);
