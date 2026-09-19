@@ -251,6 +251,11 @@ async function createMilestone() {
         return;
     }
 
+    if (Object.values(msState.milestones).some(m => m.name && m.name.trim().toLowerCase() === name.toLowerCase())) {
+        alert(`Milestone "${name}" đã tồn tại! Vui lòng chọn milestone này từ danh sách "CHỌN MILESTONE".`);
+        return;
+    }
+
     // Generate an ID from the name
     const msId = 'ms_' + name.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase() + '_' + Date.now();
 
@@ -595,11 +600,20 @@ function renderUnassignedTasks() {
 
     // Search filter
     if (searchTerm) {
+        const cleanTerm = searchTerm.replace(/^#/, '').trim();
         unassigned = unassigned.filter(t => {
             const title = (t.title || '').toLowerCase();
-            const id = String(t.iid || t.id);
-            const assignees = (t.assignees || []).map(a => a.username || '').join(' ').toLowerCase();
-            return title.includes(searchTerm) || id.includes(searchTerm) || assignees.includes(searchTerm);
+            const iidStr = String(t.iid || '');
+            const idStr = String(t.id || '');
+            const assignees = (t.assignees || []).map(a => (a.username || '') + ' ' + (a.name || '')).join(' ').toLowerCase();
+            const author = t.author ? ((t.author.username || '') + ' ' + (t.author.name || '')).toLowerCase() : '';
+            return title.includes(searchTerm) || 
+                   title.includes(cleanTerm) || 
+                   iidStr === cleanTerm ||
+                   iidStr.includes(cleanTerm) || 
+                   idStr.includes(cleanTerm) || 
+                   assignees.includes(cleanTerm) ||
+                   author.includes(cleanTerm);
         });
     }
 
