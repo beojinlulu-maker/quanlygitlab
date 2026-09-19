@@ -59,6 +59,16 @@ const formatDateVN = (dateStr) => {
     }
 };
 
+const escapeHtml = (str) => {
+    if (!str) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+};
+
 const loadTaskMeta = (taskId, taskObj = null) => {
     if (taskObj && taskObj._meta) {
         return taskObj._meta;
@@ -1332,6 +1342,39 @@ function renderMsTaskTable() {
 
         const webUrl = task.web_url || '#';
 
+        const evalData = (window.taskCommentEvaluations && window.taskCommentEvaluations[taskId]) || null;
+        let aiEvalHtml = '';
+        if (evalData) {
+            let riskBg = '#f0fdf4', riskColor = '#16a34a', riskBorder = '#bbf7d0';
+            if (evalData.risk === 'danger') {
+                riskBg = '#fef2f2'; riskColor = '#dc2626'; riskBorder = '#fecaca';
+            } else if (evalData.risk === 'warning') {
+                riskBg = '#fffbeb'; riskColor = '#d97706'; riskBorder = '#fde68a';
+            }
+            aiEvalHtml = `
+                <div style="display:flex; flex-direction:column; gap:4px; max-width:320px;">
+                    <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                        <span style="display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:100px; font-size:10px; font-weight:800; background:${riskBg}; color:${riskColor}; border:1px solid ${riskBorder};">
+                            ${escapeHtml(evalData.status || 'Đã đánh giá')}
+                        </span>
+                        <button onclick="showTaskCommentDetail('${taskId}')" style="background:transparent; border:none; color:#2563eb; cursor:pointer; font-size:11px; padding:0; display:inline-flex; align-items:center; gap:3px; font-weight:600;" title="Xem chi tiết bình luận">
+                            <i data-lucide="message-square" style="width:12px; height:12px;"></i> (${evalData.commentCount || 0})
+                        </button>
+                    </div>
+                    ${evalData.summary ? `<div style="font-size:11px; color:#475569; line-height:1.4; font-style:italic;">${escapeHtml(evalData.summary)}</div>` : ''}
+                </div>
+            `;
+        } else {
+            aiEvalHtml = `
+                <div style="display:flex; align-items:center; gap:6px;">
+                    <span style="color:#94a3b8; font-size:11px; font-style:italic;">Chưa đánh giá</span>
+                    <button onclick="showTaskCommentDetail('${taskId}')" style="background:#f1f5f9; border:1px solid #cbd5e1; border-radius:4px; color:#475569; cursor:pointer; font-size:10px; padding:2px 6px; display:inline-flex; align-items:center; gap:3px;" title="Xem các bình luận">
+                        <i data-lucide="message-square" style="width:11px; height:11px;"></i> Comment
+                    </button>
+                </div>
+            `;
+        }
+
         tr.innerHTML = `
             <td style="text-align:center;"><input type="checkbox" data-task-id="${taskId}" ${isChecked ? 'checked' : ''}></td>
             <td class="cell-stt"><a href="${webUrl}" target="_blank" class="ms-task-link">#${task.iid || task.id}</a></td>
@@ -1340,6 +1383,7 @@ function renderMsTaskTable() {
             <td>${authorHtml}</td>
             <td>${labelsHtml}</td>
             <td><span style="display:inline-block;padding:3px 10px;border-radius:100px;font-size:10px;font-weight:700;background:${statusInfo.bg};color:${statusInfo.color};border:1px solid ${statusInfo.color}22;">${statusInfo.text}</span></td>
+            <td>${aiEvalHtml}</td>
             <td class="ms-date-cell">${formatDateVN(task.created_at)}</td>
         `;
 
@@ -1420,6 +1464,268 @@ async function saveTaskSummaries() {
         await window.db.collection('settings').doc('taskSummaries').set(window.taskSummaries);
     } catch (e) {
         console.error("Failed to save task summaries to DB", e);
+    }
+}
+
+// --- Task Comment Evaluation State & Methods ---
+window.taskCommentEvaluations = {};
+window.taskNotesCache = {};
+
+async function loadTaskCommentEvaluations() {
+    if (!window.db) return;
+    try {
+        const doc = await window.db.collection('settings').doc('taskCommentEvaluations').get();
+        if (doc.exists) {
+            window.taskCommentEvaluations = doc.data() || {};
+        }
+    } catch (e) {
+        console.error("Failed to load task comment evaluations from DB", e);
+    }
+}
+
+async function saveTaskCommentEvaluations() {
+    if (!window.db) return;
+    try {
+        await window.db.collection('settings').doc('taskCommentEvaluations').set(window.taskCommentEvaluations);
+    } catch (e) {
+        console.error("Failed to save task comment evaluations to DB", e);
+    }
+}
+
+window.showTaskCommentDetail = async function(taskId) {
+    const task = msState.allTasks.find(t => String(t.id) === String(taskId));
+    if (!task) return;
+
+    const modal = document.getElementById('comment-detail-modal');
+    const titleEl = document.getElementById('comment-modal-title');
+    const statusEl = document.getElementById('comment-modal-ai-status');
+    const summaryEl = document.getElementById('comment-modal-ai-summary');
+    const listEl = document.getElementById('comment-modal-list');
+    const aiBox = document.getElementById('comment-modal-ai-box');
+
+    titleEl.textContent = `Task #${task.iid || task.id}: ${task.title}`;
+
+    const evalData = (window.taskCommentEvaluations && window.taskCommentEvaluations[taskId]) || null;
+    if (evalData) {
+        statusEl.textContent = evalData.status || 'Đã đánh giá';
+        let statusBg = '#f0fdf4', statusColor = '#166534', statusBorder = '#bbf7d0';
+        if (evalData.risk === 'danger') {
+            statusBg = '#fef2f2'; statusColor = '#dc2626'; statusBorder = '#fecaca';
+        } else if (evalData.risk === 'warning') {
+            statusBg = '#fffbeb'; statusColor = '#d97706'; statusBorder = '#fde68a';
+        }
+        statusEl.style.background = statusBg;
+        statusEl.style.color = statusColor;
+        statusEl.style.border = `1px solid ${statusBorder}`;
+        summaryEl.textContent = evalData.summary || 'Chưa có tóm tắt đánh giá từ comment.';
+        aiBox.style.display = 'block';
+    } else {
+        aiBox.style.display = 'none';
+    }
+
+    listEl.innerHTML = '<div style="padding:20px; text-align:center; color:#64748b;">Đang tải bình luận...</div>';
+    modal.style.display = 'flex';
+    if (window.lucide) lucide.createIcons();
+
+    // Fetch notes if not cached
+    let notes = window.taskNotesCache[taskId];
+    if (!notes) {
+        const projectId = task.project_id || PROJECT_ID;
+        try {
+            const res = await fetch(`${GITLAB_BASE_URL}/projects/${projectId}/issues/${task.iid}/notes?per_page=50&sort=desc`, {
+                headers: { 'PRIVATE-TOKEN': GITLAB_TOKEN }
+            });
+            if (res.ok) {
+                const data = await res.json();
+                notes = (Array.isArray(data) ? data : [])
+                    .filter(n => !n.system && n.body && n.body.trim())
+                    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+                window.taskNotesCache[taskId] = notes;
+            }
+        } catch(e) {
+            notes = [];
+        }
+    }
+
+    if (!notes || notes.length === 0) {
+        listEl.innerHTML = '<div style="padding:20px; text-align:center; color:#94a3b8; font-style:italic;">Không có bình luận nào cho task này.</div>';
+        return;
+    }
+
+    listEl.innerHTML = notes.map(n => {
+        const authorName = n.author?.name || n.author?.username || 'User';
+        const authorAvatar = n.author?.avatar_url || '';
+        const dateStr = formatDateVN(n.created_at);
+        const timeStr = new Date(n.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+        return `
+            <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:12px 16px;">
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        ${authorAvatar ? `<img src="${authorAvatar}" style="width:24px; height:24px; border-radius:50%; object-fit:cover;">` : '<div style="width:24px; height:24px; border-radius:50%; background:#cbd5e1; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; color:#475569;">?</div>'}
+                        <strong style="font-size:13px; color:#334155;">${escapeHtml(authorName)}</strong>
+                    </div>
+                    <span style="font-size:11px; color:#94a3b8;">${dateStr} ${timeStr}</span>
+                </div>
+                <div style="font-size:13px; color:#1e293b; line-height:1.5; white-space:pre-wrap; word-break:break-word;">${escapeHtml(n.body)}</div>
+            </div>
+        `;
+    }).join('');
+};
+
+async function evaluateMilestoneTaskCommentsWithGemini() {
+    const tasks = getMilestoneTasks();
+    if (!tasks || tasks.length === 0) {
+        alert("Milestone hiện tại chưa có task nào để đánh giá!");
+        return;
+    }
+
+    const apiKey = getGeminiApiKey();
+    if (!apiKey) return;
+
+    const btn = document.getElementById('btn-ai-eval-comments');
+    const originalBtnHtml = btn ? btn.innerHTML : '';
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i data-lucide="loader-2" class="spin" style="width:14px; height:14px; margin-right:4px; vertical-align:middle;"></i> Đang tải comment & phân tích AI...';
+        if (window.lucide) lucide.createIcons();
+    }
+
+    try {
+        // 1. Fetch comments for all tasks
+        const taskNotesMap = {};
+        await Promise.all(tasks.map(async (task) => {
+            const taskId = String(task.id);
+            if (window.taskNotesCache[taskId]) {
+                taskNotesMap[taskId] = window.taskNotesCache[taskId];
+                return;
+            }
+            const projectId = task.project_id || PROJECT_ID;
+            try {
+                const res = await fetch(`${GITLAB_BASE_URL}/projects/${projectId}/issues/${task.iid}/notes?per_page=50&sort=desc`, {
+                    headers: { 'PRIVATE-TOKEN': GITLAB_TOKEN }
+                });
+                if (res.ok) {
+                    const notes = await res.json();
+                    const userNotes = (Array.isArray(notes) ? notes : [])
+                        .filter(n => !n.system && n.body && n.body.trim())
+                        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+                    taskNotesMap[taskId] = userNotes;
+                    window.taskNotesCache[taskId] = userNotes;
+                }
+            } catch (e) {
+                console.error(`Lỗi fetch notes cho task #${task.iid}`, e);
+                taskNotesMap[taskId] = [];
+            }
+        }));
+
+        // 2. Build batch prompt
+        let promptTaskData = "";
+        tasks.forEach(task => {
+            const taskId = String(task.id);
+            const userNotes = taskNotesMap[taskId] || [];
+            const recentNotes = userNotes.slice(0, 5).map(n => {
+                const authorName = n.author?.name || n.author?.username || 'User';
+                const dateStr = formatDateVN(n.created_at);
+                const bodyStr = (n.body || '').replace(/\s+/g, ' ').substring(0, 200);
+                return `[${authorName} lúc ${dateStr}]: ${bodyStr}`;
+            }).join('\n');
+
+            promptTaskData += `\n--- TASK ID: ${taskId} ---\nTitle: ${task.title}\nStatus: ${task.state}\nAssignee: ${(task.assignees || []).map(a => a.username).join(', ') || 'None'}\nRecent Comments:\n${recentNotes || '(Chưa có bình luận)'}\n`;
+        });
+
+        const promptText = `Bạn là một chuyên gia Quản lý dự án phần mềm (Project Manager / QA Lead).
+Nhiệm vụ của bạn là đọc các bình luận (comments) mới nhất của từng Task trong Milestone dưới đây và đánh giá TÌNH TRẠNG TIẾN ĐỘ THỰC TẾ của từng task.
+
+Yêu cầu định dạng:
+Chỉ trả về DUY NHẤT một chuỗi JSON hợp lệ (không kèm markdown \`\`\`json, không kèm giải thích bên ngoài).
+Cấu trúc JSON như sau:
+{
+  "TASK_ID": {
+    "status": "Trạng thái thực tế ngắn gọn (tối đa 4-6 từ, ví dụ: 'Đang chờ review', 'Đã fix xong chờ test', 'Gặp vướng mắc blocker', 'Chờ khách hàng phản hồi', 'Đang xử lý', 'Chưa có bình luận mới'...)",
+    "summary": "Tóm tắt diễn biến hoặc kết luận từ các comment gần nhất thành 1 câu ngắn gọn (tối đa 25 từ)",
+    "risk": "normal" hoặc "warning" hoặc "danger" (chọn 'danger' nếu task bị tắc nghẽn/lỗi nặng, 'warning' nếu đang chờ thông tin/có nguy cơ, 'normal' nếu tiến độ bình thường hoặc đã xong)
+  }
+}
+
+Danh sách Task và Comments:
+${promptTaskData}`;
+
+        // 3. Call Gemini API with retry
+        const maxRetries = 3;
+        let responseData = null;
+
+        for (let attempt = 0; attempt <= maxRetries; attempt++) {
+            try {
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${apiKey}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: promptText }] }],
+                        generationConfig: {
+                            temperature: 0.2,
+                            maxOutputTokens: 3000,
+                            responseMimeType: "application/json"
+                        }
+                    })
+                });
+
+                if (response.status === 429) {
+                    console.warn(`[AI] Rate limit 429. Attempt ${attempt + 1}/${maxRetries + 1}.`);
+                    if (attempt < maxRetries) {
+                        const waitTime = Math.pow(2, attempt + 1) * 5000;
+                        if (btn) btn.innerHTML = `<i data-lucide="loader-2" class="spin" style="width:14px; height:14px;"></i> Chờ thử lại (${waitTime/1000}s)...`;
+                        await new Promise(r => setTimeout(r, waitTime));
+                        continue;
+                    }
+                }
+
+                if (!response.ok) {
+                    throw new Error(`Gemini API error: ${response.status} ${response.statusText}`);
+                }
+
+                const result = await response.json();
+                const rawText = result.candidates?.[0]?.content?.parts?.[0]?.text;
+                if (rawText) {
+                    try {
+                        responseData = JSON.parse(rawText);
+                    } catch (e) {
+                        const clean = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
+                        responseData = JSON.parse(clean);
+                    }
+                }
+                break;
+            } catch (err) {
+                if (attempt === maxRetries) throw err;
+            }
+        }
+
+        if (responseData && typeof responseData === 'object') {
+            Object.entries(responseData).forEach(([taskId, val]) => {
+                const userNotes = taskNotesMap[taskId] || [];
+                window.taskCommentEvaluations[taskId] = {
+                    status: val.status || 'Đang cập nhật',
+                    summary: val.summary || '',
+                    risk: val.risk || 'normal',
+                    commentCount: userNotes.length,
+                    evaluatedAt: new Date().toISOString()
+                };
+            });
+
+            await saveTaskCommentEvaluations();
+            renderMsTaskTable();
+            alert(`Đã hoàn tất đánh giá ${Object.keys(responseData).length} task trong Milestone từ comment!`);
+        } else {
+            alert("Không thể giải mã kết quả trả về từ AI. Vui lòng thử lại!");
+        }
+    } catch (e) {
+        console.error("Lỗi khi đánh giá comment bằng AI:", e);
+        alert("Có lỗi xảy ra khi gọi AI đánh giá: " + (e.message || e));
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = originalBtnHtml;
+            if (window.lucide) lucide.createIcons();
+        }
     }
 }
 
@@ -1751,6 +2057,7 @@ function copyMilestoneTable() {
                 <th style="padding: 8px; background-color: #f1f5f9; text-align: left;">AUTHOR</th>
                 <th style="padding: 8px; background-color: #f1f5f9; text-align: left;">LABELS</th>
                 <th style="padding: 8px; background-color: #f1f5f9; text-align: left;">TRẠNG THÁI</th>
+                <th style="padding: 8px; background-color: #f1f5f9; text-align: left;">ĐÁNH GIÁ TỪ COMMENT (AI)</th>
                 <th style="padding: 8px; background-color: #f1f5f9; text-align: left;">NGÀY TẠO</th>
             </tr>
         </thead>
@@ -1770,6 +2077,8 @@ function copyMilestoneTable() {
         
         const statusKey = getTaskStatus(task);
         const status = statusLabels[statusKey] || statusKey;
+        const evalData = (window.taskCommentEvaluations && window.taskCommentEvaluations[String(task.id)]) || null;
+        const evalText = evalData ? `[${evalData.status}] ${evalData.summary || ''}` : '—';
         const date = formatDateVN(task.created_at);
 
         html += `
@@ -1780,6 +2089,7 @@ function copyMilestoneTable() {
                 <td style="padding: 8px;">${author}</td>
                 <td style="padding: 8px;">${labels}</td>
                 <td style="padding: 8px;">${status}</td>
+                <td style="padding: 8px;">${evalText}</td>
                 <td style="padding: 8px;">${date}</td>
             </tr>`;
     });
@@ -1897,6 +2207,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Load task summaries from Firestore
     await loadTaskSummaries();
 
+    // Load task comment evaluations from Firestore
+    await loadTaskCommentEvaluations();
+
     // Fetch tasks from GitLab
     await fetchProjectTasks();
 
@@ -1930,6 +2243,26 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     const btnDoneInfo = document.getElementById('btn-done-task-info');
     if (btnDoneInfo) btnDoneInfo.addEventListener('click', showDoneTaskInfo);
+
+    const btnAiEval = document.getElementById('btn-ai-eval-comments');
+    if (btnAiEval) btnAiEval.addEventListener('click', evaluateMilestoneTaskCommentsWithGemini);
+
+    const btnCloseCommentModal = document.getElementById('btn-close-comment-modal');
+    if (btnCloseCommentModal) {
+        btnCloseCommentModal.addEventListener('click', () => {
+            const m = document.getElementById('comment-detail-modal');
+            if (m) m.style.display = 'none';
+        });
+    }
+
+    const commentModal = document.getElementById('comment-detail-modal');
+    if (commentModal) {
+        commentModal.addEventListener('click', (e) => {
+            if (e.target.id === 'comment-detail-modal') {
+                commentModal.style.display = 'none';
+            }
+        });
+    }
 
     document.getElementById('ms-select').addEventListener('change', (e) => {
         selectMilestone(e.target.value);

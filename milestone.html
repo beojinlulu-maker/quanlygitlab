@@ -1075,6 +1075,10 @@
                             <span id="ms-task-count" class="count-badge">0</span>
                         </div>
                         <div style="display:flex; gap:12px;">
+                            <button id="btn-ai-eval-comments" class="btn-primary" style="background:#059669; border-color:#047857;">
+                                <i data-lucide="bot" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i>
+                                AI Đánh giá từ Comment
+                            </button>
                             <button id="btn-done-task-info" class="btn-primary" style="background:#8b5cf6; border-color:#7c3aed;">
                                 <i data-lucide="info" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i>
                                 Cập nhật thông tin task hoàn thành
@@ -1101,6 +1105,7 @@
                                     <th style="width:140px">AUTHOR</th>
                                     <th style="width:120px">LABELS</th>
                                     <th style="width:120px">TRẠNG THÁI</th>
+                                    <th style="min-width:220px">ĐÁNH GIÁ TỪ COMMENT (AI)</th>
                                     <th style="width:100px">NGÀY TẠO</th>
                                 </tr>
                             </thead>
@@ -1117,6 +1122,39 @@
 
             </div>
             <!-- End ms-overview -->
+
+            <!-- Comment Detail & AI Analysis Modal -->
+            <div id="comment-detail-modal" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000; display:none; justify-content:center; align-items:center;">
+                <div style="background:#fff; width:90%; max-width:850px; max-height:85vh; border-radius:12px; display:flex; flex-direction:column; box-shadow:0 10px 25px rgba(0,0,0,0.15);">
+                    <div style="padding:18px 24px; border-bottom:1px solid #e2e8f0; display:flex; justify-content:space-between; align-items:center; background:#f8fafc; border-radius:12px 12px 0 0;">
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <i data-lucide="message-square" style="width:20px; height:20px; color:#059669;"></i>
+                            <h3 id="comment-modal-title" style="margin:0; font-size:16px; color:#1e293b; font-weight:700;">Chi tiết bình luận & Đánh giá AI</h3>
+                        </div>
+                        <button id="btn-close-comment-modal" style="background:transparent; border:none; cursor:pointer; color:#64748b; display:flex; align-items:center; justify-content:center;"><i data-lucide="x"></i></button>
+                    </div>
+                    <div style="padding:20px 24px; overflow-y:auto; flex:1;">
+                        <!-- AI Assessment Card -->
+                        <div id="comment-modal-ai-box" style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; padding:14px 18px; margin-bottom:20px;">
+                            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+                                <span style="font-size:13px; font-weight:700; color:#166534; display:flex; align-items:center; gap:6px;">
+                                    <i data-lucide="sparkles" style="width:16px; height:16px;"></i> Đánh giá AI từ Comment:
+                                </span>
+                                <span id="comment-modal-ai-status" style="font-size:12px; font-weight:800; padding:2px 10px; border-radius:100px;"></span>
+                            </div>
+                            <p id="comment-modal-ai-summary" style="margin:0; font-size:13px; color:#1e293b; line-height:1.6;"></p>
+                        </div>
+                        
+                        <!-- Comments Timeline List -->
+                        <h4 style="margin:0 0 12px 0; font-size:14px; color:#475569; font-weight:700; display:flex; align-items:center; gap:6px;">
+                            <i data-lucide="messages-square" style="width:16px; height:16px;"></i> Lịch sử thảo luận (Comments)
+                        </h4>
+                        <div id="comment-modal-list" style="display:flex; flex-direction:column; gap:12px;">
+                            <!-- Populated by JS -->
+                        </div>
+                    </div>
+                </div>
+            </div>
 
             <!-- Done Task Info Modal -->
             <div id="done-task-modal" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000; display:none; justify-content:center; align-items:center;">
