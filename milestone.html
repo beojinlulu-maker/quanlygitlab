@@ -1074,10 +1074,14 @@
                             DANH SÁCH TASK TRONG MILESTONE
                             <span id="ms-task-count" class="count-badge">0</span>
                         </div>
-                        <div style="display:flex; gap:12px;">
+                        <div style="display:flex; gap:12px; flex-wrap:wrap;">
                             <button id="btn-ai-eval-comments" class="btn-primary" style="background:#059669; border-color:#047857;">
                                 <i data-lucide="bot" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i>
                                 AI Đánh giá từ Comment
+                            </button>
+                            <button id="btn-change-ai-key-toolbar" class="btn-primary" style="background:#f1f5f9; color:#475569; border:1px solid #cbd5e1;" title="Cập nhật lại Gemini API Key">
+                                <i data-lucide="key" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i>
+                                Đổi AI Key
                             </button>
                             <button id="btn-done-task-info" class="btn-primary" style="background:#8b5cf6; border-color:#7c3aed;">
                                 <i data-lucide="info" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i>
@@ -1131,7 +1135,12 @@
                             <i data-lucide="message-square" style="width:20px; height:20px; color:#059669;"></i>
                             <h3 id="comment-modal-title" style="margin:0; font-size:16px; color:#1e293b; font-weight:700;">Chi tiết bình luận & Đánh giá AI</h3>
                         </div>
-                        <button id="btn-close-comment-modal" style="background:transparent; border:none; cursor:pointer; color:#64748b; display:flex; align-items:center; justify-content:center;"><i data-lucide="x"></i></button>
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <button id="btn-change-ai-key-modal" style="background:#f1f5f9; border:1px solid #cbd5e1; border-radius:6px; padding:4px 8px; font-size:12px; cursor:pointer; color:#475569; display:flex; align-items:center;" title="Cập nhật lại Gemini API Key">
+                                <i data-lucide="key" style="width:12px; height:12px; margin-right:4px;"></i> Đổi AI Key
+                            </button>
+                            <button id="btn-close-comment-modal" style="background:transparent; border:none; cursor:pointer; color:#64748b; display:flex; align-items:center; justify-content:center;"><i data-lucide="x"></i></button>
+                        </div>
                     </div>
                     <div style="padding:20px 24px; overflow-y:auto; flex:1;">
                         <!-- AI Assessment Card -->

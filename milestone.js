@@ -1575,7 +1575,7 @@ window.showTaskCommentDetail = async function(taskId) {
 async function evaluateMilestoneTaskCommentsWithGemini() {
     const tasks = getMilestoneTasks();
     if (!tasks || tasks.length === 0) {
-        alert("Milestone hiện tại chưa có task nào để đánh giá!");
+        alert("Milestone hiện tại chưa có task nào để đánh giá!\nVui lòng chọn một Milestone có chứa task từ mục 'CHỌN MILESTONE' trước khi bấm nút.");
         return;
     }
 
@@ -1637,7 +1637,7 @@ async function evaluateMilestoneTaskCommentsWithGemini() {
 Nhiệm vụ của bạn là đọc các bình luận (comments) mới nhất của từng Task trong Milestone dưới đây và đánh giá TÌNH TRẠNG TIẾN ĐỘ THỰC TẾ của từng task.
 
 Yêu cầu định dạng:
-Chỉ trả về DUY NHẤT một chuỗi JSON hợp lệ (không kèm markdown \`\`\`json, không kèm giải thích bên ngoài).
+Chỉ trả về DUY NHẤT một chuỗi JSON hợp lệ (không kèm giải thích bên ngoài).
 Cấu trúc JSON như sau:
 {
   "TASK_ID": {
@@ -1650,56 +1650,89 @@ Cấu trúc JSON như sau:
 Danh sách Task và Comments:
 ${promptTaskData}`;
 
-        // 3. Call Gemini API with retry
-        const maxRetries = 3;
+        // 3. Call Gemini API with model fallback & retry
+        const modelsToTry = ['gemini-1.5-flash', 'gemini-flash-latest', 'gemini-2.0-flash'];
         let responseData = null;
+        let lastError = null;
 
-        for (let attempt = 0; attempt <= maxRetries; attempt++) {
-            try {
-                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${apiKey}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        contents: [{ parts: [{ text: promptText }] }],
-                        generationConfig: {
-                            temperature: 0.2,
-                            maxOutputTokens: 3000,
-                            responseMimeType: "application/json"
+        for (const modelName of modelsToTry) {
+            const maxRetries = 2;
+            let modelSuccess = false;
+
+            for (let attempt = 0; attempt <= maxRetries; attempt++) {
+                try {
+                    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            contents: [{ parts: [{ text: promptText }] }],
+                            generationConfig: {
+                                temperature: 0.2,
+                                maxOutputTokens: 4000
+                            }
+                        })
+                    });
+
+                    if (response.status === 429 || response.status === 503) {
+                        console.warn(`[AI] Status ${response.status} on ${modelName}. Attempt ${attempt + 1}/${maxRetries + 1}.`);
+                        if (attempt < maxRetries) {
+                            const waitTime = Math.pow(2, attempt + 1) * 4000;
+                            if (btn) btn.innerHTML = `<i data-lucide="loader-2" class="spin" style="width:14px; height:14px;"></i> Chờ thử lại (${waitTime/1000}s)...`;
+                            await new Promise(r => setTimeout(r, waitTime));
+                            continue;
                         }
-                    })
-                });
-
-                if (response.status === 429) {
-                    console.warn(`[AI] Rate limit 429. Attempt ${attempt + 1}/${maxRetries + 1}.`);
-                    if (attempt < maxRetries) {
-                        const waitTime = Math.pow(2, attempt + 1) * 5000;
-                        if (btn) btn.innerHTML = `<i data-lucide="loader-2" class="spin" style="width:14px; height:14px;"></i> Chờ thử lại (${waitTime/1000}s)...`;
-                        await new Promise(r => setTimeout(r, waitTime));
-                        continue;
                     }
-                }
 
-                if (!response.ok) {
-                    throw new Error(`Gemini API error: ${response.status} ${response.statusText}`);
-                }
-
-                const result = await response.json();
-                const rawText = result.candidates?.[0]?.content?.parts?.[0]?.text;
-                if (rawText) {
-                    try {
-                        responseData = JSON.parse(rawText);
-                    } catch (e) {
-                        const clean = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
-                        responseData = JSON.parse(clean);
+                    if (response.status === 400 || response.status === 401 || response.status === 403) {
+                        const errBody = await response.text();
+                        console.error(`[AI] Auth/Key error HTTP ${response.status}:`, errBody);
+                        if (confirm(`Lỗi kết nối Gemini API (${response.status}):\nMã API Key hiện tại có thể không đúng hoặc đã hết hạn.\n\nBạn có muốn nhập lại mã API Key mới không?`)) {
+                            promptChangeGeminiApiKey();
+                        }
+                        return;
                     }
+
+                    if (response.status === 404) {
+                        console.warn(`Model ${modelName} not found (404), trying next...`);
+                        break;
+                    }
+
+                    if (!response.ok) {
+                        const errBody = await response.text();
+                        throw new Error(`Gemini API error (${response.status}): ${errBody}`);
+                    }
+
+                    const result = await response.json();
+                    const rawText = result.candidates?.[0]?.content?.parts?.[0]?.text;
+                    if (rawText) {
+                        try {
+                            responseData = JSON.parse(rawText);
+                        } catch (e) {
+                            const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+                            if (jsonMatch) {
+                                try {
+                                    responseData = JSON.parse(jsonMatch[0]);
+                                } catch(e2) {
+                                    console.error("JSON extract error:", e2);
+                                }
+                            }
+                        }
+                    }
+
+                    if (responseData && typeof responseData === 'object' && Object.keys(responseData).length > 0) {
+                        modelSuccess = true;
+                        break;
+                    }
+                } catch (err) {
+                    lastError = err;
+                    if (attempt === maxRetries) break;
                 }
-                break;
-            } catch (err) {
-                if (attempt === maxRetries) throw err;
             }
+
+            if (modelSuccess) break;
         }
 
-        if (responseData && typeof responseData === 'object') {
+        if (responseData && typeof responseData === 'object' && Object.keys(responseData).length > 0) {
             Object.entries(responseData).forEach(([taskId, val]) => {
                 const userNotes = taskNotesMap[taskId] || [];
                 window.taskCommentEvaluations[taskId] = {
@@ -1715,7 +1748,11 @@ ${promptTaskData}`;
             renderMsTaskTable();
             alert(`Đã hoàn tất đánh giá ${Object.keys(responseData).length} task trong Milestone từ comment!`);
         } else {
-            alert("Không thể giải mã kết quả trả về từ AI. Vui lòng thử lại!");
+            if (lastError) {
+                throw lastError;
+            } else {
+                alert("Không thể giải mã kết quả trả về từ AI. Vui lòng thử lại!");
+            }
         }
     } catch (e) {
         console.error("Lỗi khi đánh giá comment bằng AI:", e);
@@ -1732,12 +1769,22 @@ ${promptTaskData}`;
 function getGeminiApiKey() {
     let key = localStorage.getItem('geminiApiKey');
     if (!key) {
-        key = prompt("Tính năng tóm tắt tự động cần có Google Gemini API Key.\nVui lòng nhập mã API Key (bắt đầu bằng AIzaSy...) của bạn:");
-        if (key) {
-            localStorage.setItem('geminiApiKey', key.trim());
+        key = prompt("Tính năng AI cần có Google Gemini API Key để phân tích.\nVui lòng nhập mã API Key (bắt đầu bằng AIzaSy...) của bạn:\n(Bạn có thể lấy key miễn phí tại https://aistudio.google.com)");
+        if (key && key.trim()) {
+            key = key.trim();
+            localStorage.setItem('geminiApiKey', key);
         }
     }
     return key ? key.trim() : null;
+}
+
+function promptChangeGeminiApiKey() {
+    const currentKey = localStorage.getItem('geminiApiKey') || '';
+    const newKey = prompt("Vui lòng nhập mã Google Gemini API Key mới của bạn (bắt đầu bằng AIzaSy...):", currentKey);
+    if (newKey && newKey.trim()) {
+        localStorage.setItem('geminiApiKey', newKey.trim());
+        alert("Đã cập nhật Gemini API Key mới thành công!");
+    }
 }
 
 async function summarizeTaskWithGemini(task) {
@@ -2246,6 +2293,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     const btnAiEval = document.getElementById('btn-ai-eval-comments');
     if (btnAiEval) btnAiEval.addEventListener('click', evaluateMilestoneTaskCommentsWithGemini);
+
+    document.getElementById('btn-change-ai-key-toolbar')?.addEventListener('click', promptChangeGeminiApiKey);
+    document.getElementById('btn-change-ai-key-modal')?.addEventListener('click', promptChangeGeminiApiKey);
 
     const btnCloseCommentModal = document.getElementById('btn-close-comment-modal');
     if (btnCloseCommentModal) {
