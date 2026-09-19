@@ -2294,7 +2294,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     const btnAiEval = document.getElementById('btn-ai-eval-comments');
     if (btnAiEval) btnAiEval.addEventListener('click', evaluateMilestoneTaskCommentsWithGemini);
 
-    document.getElementById('btn-change-ai-key-toolbar')?.addEventListener('click', promptChangeGeminiApiKey);
     document.getElementById('btn-change-ai-key-modal')?.addEventListener('click', promptChangeGeminiApiKey);
 
     const btnCloseCommentModal = document.getElementById('btn-close-comment-modal');
