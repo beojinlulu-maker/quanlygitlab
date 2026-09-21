@@ -844,11 +844,33 @@ function renderDoneUnassignedTasks() {
     lucide.createIcons();
 }
 
+function getPreviousMilestone(currentMsId) {
+    if (!currentMsId || !msState.milestones[currentMsId]) return null;
+    const currMs = msState.milestones[currentMsId];
+    if (!currMs.startDate || !currMs.endDate) return null;
+
+    const allSorted = Object.entries(msState.milestones)
+        .filter(([id, m]) => m && m.startDate && m.endDate)
+        .map(([id, m]) => ({ id, ...m }))
+        .sort((a, b) => {
+            const dateDiff = new Date(a.startDate) - new Date(b.startDate);
+            if (dateDiff !== 0) return dateDiff;
+            return new Date(a.endDate) - new Date(b.endDate);
+        });
+
+    const currIdx = allSorted.findIndex(m => m.id === currentMsId);
+    if (currIdx > 0) {
+        return allSorted[currIdx - 1];
+    }
+    return null;
+}
+
 function renderEinvoiceDoneTasks() {
     const tbody = document.getElementById('einvoice-done-tbody');
     const emptyState = document.getElementById('einvoice-done-empty');
     const countEl = document.getElementById('einvoice-done-count');
     const panel = document.getElementById('einvoice-done-panel');
+    const dateRangeEl = document.getElementById('einvoice-done-date-range');
     
     if (!tbody || !emptyState || !countEl || !panel) return;
 
@@ -859,13 +881,30 @@ function renderEinvoiceDoneTasks() {
         emptyState.classList.remove('hidden');
         countEl.textContent = '0';
         panel.style.display = 'none';
+        if (dateRangeEl) dateRangeEl.textContent = '';
         return;
     }
 
     panel.style.display = 'block';
     
-    let msStart = new Date(ms.startDate).setHours(0, 0, 0, 0);
+    const prevMs = getPreviousMilestone(msState.currentMilestone);
+    let msStart;
+    let rangeDesc = '';
+    
+    if (prevMs && prevMs.endDate) {
+        // Từ sau thời điểm kết thúc milestone liền trước
+        msStart = new Date(prevMs.endDate).setHours(23, 59, 59, 999);
+        rangeDesc = `từ sau kết thúc ${prevMs.name || 'MS liền trước'} (${formatDateVN(prevMs.endDate)}) đến kết thúc ${ms.name || ''} (${formatDateVN(ms.endDate)})`;
+    } else {
+        // Nếu không có milestone liền trước thì lấy từ ngày bắt đầu milestone này
+        msStart = new Date(ms.startDate).setHours(0, 0, 0, 0);
+        rangeDesc = `từ ${formatDateVN(ms.startDate)} đến ${formatDateVN(ms.endDate)}`;
+    }
     let msEnd = new Date(ms.endDate).setHours(23, 59, 59, 999);
+
+    if (dateRangeEl) {
+        dateRangeEl.textContent = `(${rangeDesc})`;
+    }
     
     const assignedIds = getAllAssignedTaskIds();
 
@@ -879,10 +918,21 @@ function renderEinvoiceDoneTasks() {
         if (hasDoneFA) {
             const taskDateStr = t.doneFA_date || t.closed_at || t.updated_at || t.created_at;
             const taskTime = new Date(taskDateStr).getTime();
-            return taskTime >= msStart && taskTime <= msEnd;
+            if (prevMs && prevMs.endDate) {
+                return taskTime > msStart && taskTime <= msEnd;
+            } else {
+                return taskTime >= msStart && taskTime <= msEnd;
+            }
         }
         
         return false;
+    });
+
+    // Sắp xếp ngày hoàn thành mới nhất lên trên
+    einvoiceDone.sort((a, b) => {
+        const dateA = new Date(a.doneFA_date || a.closed_at || a.updated_at || a.created_at).getTime();
+        const dateB = new Date(b.doneFA_date || b.closed_at || b.updated_at || b.created_at).getTime();
+        return dateB - dateA;
     });
 
     countEl.textContent = einvoiceDone.length;
@@ -890,6 +940,10 @@ function renderEinvoiceDoneTasks() {
     if (einvoiceDone.length === 0) {
         tbody.innerHTML = '';
         emptyState.classList.remove('hidden');
+        const emptyMsg = emptyState.querySelector('p');
+        if (emptyMsg) {
+            emptyMsg.textContent = `Không có task hoá đơn điện tử DONE (F&A) nào trong khoảng thời gian này (${rangeDesc}).`;
+        }
         return;
     }
 
