@@ -401,15 +401,33 @@ function selectMilestone(msId) {
         document.getElementById('unassigned-panel').style.display = 'none';
         const donePanel = document.getElementById('done-unassigned-panel');
         if(donePanel) donePanel.style.display = 'none';
+        const einvoicePanel = document.getElementById('einvoice-done-panel');
+        if(einvoicePanel) einvoicePanel.style.display = 'none';
         document.getElementById('btn-delete-ms').style.display = 'none';
         document.getElementById('btn-close-ms').style.display = 'none';
         updateAddButtonState();
+        if(typeof updateAddDoneButtonState === 'function') updateAddDoneButtonState();
+        if(typeof updateAddEinvoiceDoneButtonState === 'function') updateAddEinvoiceDoneButtonState();
         return;
     }
 
     msState.currentMilestone = msId;
     const ms = msState.milestones[msId];
     if (!ms) return;
+
+    // Reset selection sets and select-all checkboxes on milestone switch
+    msState.selectedTaskIds.clear();
+    msState.selectedDoneTaskIds.clear();
+    msState.selectedEinvoiceDoneTaskIds.clear();
+    msState.selectedMsTaskIds.clear();
+    const sa1 = document.getElementById('select-all-checkbox');
+    if (sa1) sa1.checked = false;
+    const sa2 = document.getElementById('done-unassigned-select-all');
+    if (sa2) sa2.checked = false;
+    const sa3 = document.getElementById('einvoice-done-select-all');
+    if (sa3) sa3.checked = false;
+    const sa4 = document.getElementById('select-all-ms-checkbox');
+    if (sa4) sa4.checked = false;
 
     // Fill config inputs with milestone data
     document.getElementById('ms-number-input').value = ms.name || '';
@@ -430,6 +448,8 @@ function selectMilestone(msId) {
         document.getElementById('unassigned-panel').style.display = 'none';
         const donePanel = document.getElementById('done-unassigned-panel');
         if(donePanel) donePanel.style.display = 'none';
+        const einvoicePanel = document.getElementById('einvoice-done-panel');
+        if(einvoicePanel) einvoicePanel.style.display = 'none';
         
         const btnRemove = document.getElementById('btn-remove-from-ms');
         if (btnRemove) btnRemove.disabled = true;
@@ -595,6 +615,21 @@ function toggleDoneSelectAll(e) {
     if(typeof updateAddDoneButtonState === 'function') updateAddDoneButtonState();
 }
 
+function toggleEinvoiceDoneSelectAll(e) {
+    const checked = e.target.checked;
+    const checkboxes = document.querySelectorAll('#einvoice-done-tbody input[type="checkbox"]');
+    checkboxes.forEach(cb => {
+        cb.checked = checked;
+        const taskId = cb.dataset.taskId;
+        if (checked) {
+            msState.selectedEinvoiceDoneTaskIds.add(taskId);
+        } else {
+            msState.selectedEinvoiceDoneTaskIds.delete(taskId);
+        }
+    });
+    if(typeof updateAddEinvoiceDoneButtonState === 'function') updateAddEinvoiceDoneButtonState();
+}
+
 function toggleSelectAllMs(e) {
     const checked = e.target.checked;
     const checkboxes = document.querySelectorAll('#ms-task-tbody input[type="checkbox"]');
@@ -630,6 +665,16 @@ function onDoneUnassignedCheckboxChange(e) {
     if(typeof updateAddDoneButtonState === 'function') updateAddDoneButtonState();
 }
 
+function onEinvoiceDoneCheckboxChange(e) {
+    const taskId = e.target.dataset.taskId;
+    if (e.target.checked) {
+        msState.selectedEinvoiceDoneTaskIds.add(taskId);
+    } else {
+        msState.selectedEinvoiceDoneTaskIds.delete(taskId);
+    }
+    if(typeof updateAddEinvoiceDoneButtonState === 'function') updateAddEinvoiceDoneButtonState();
+}
+
 function onMsCheckboxChange(e) {
     const taskId = e.target.dataset.taskId;
     if (e.target.checked) {
@@ -648,6 +693,11 @@ function updateAddButtonState() {
 function updateAddDoneButtonState() {
     const btn = document.getElementById('btn-add-done-to-ms');
     if (btn) btn.disabled = !msState.currentMilestone || msState.selectedDoneTaskIds.size === 0;
+}
+
+function updateAddEinvoiceDoneButtonState() {
+    const btn = document.getElementById('btn-add-einvoice-done-to-ms');
+    if (btn) btn.disabled = !msState.currentMilestone || msState.selectedEinvoiceDoneTaskIds.size === 0;
 }
 
 function updateRemoveButtonState() {
