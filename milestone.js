@@ -2170,6 +2170,7 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('done-task-modal').style.display = 'none';
         }
     });
+    document.getElementById('btn-copy-done-table')?.addEventListener('click', copyDoneTaskTable);
     document.getElementById('btn-change-ai-key')?.addEventListener('click', () => {
         const currentKey = localStorage.getItem('geminiApiKey') || '';
         const newKey = prompt("Vui lòng nhập mã Gemini API Key mới của bạn (bắt đầu bằng AIzaSy...):", currentKey);
@@ -2183,6 +2184,97 @@ document.addEventListener('DOMContentLoaded', () => {
 // ============================================================
 // COPY TO CLIPBOARD
 // ============================================================
+
+function copyDoneTaskTable() {
+    const rows = document.querySelectorAll('#done-modal-tbody tr');
+    if (!rows || rows.length === 0 || (rows.length === 1 && rows[0].querySelector('td[colspan]'))) {
+        alert("Không có dữ liệu task hoàn thành để copy!");
+        return;
+    }
+
+    let html = `<table border="1" style="border-collapse: collapse; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 13px; color: #1e293b; width: 100%;">
+        <thead>
+            <tr style="background-color: #f8fafc;">
+                <th style="padding: 10px; border: 1px solid #cbd5e1; text-align: center; width: 50px;">STT</th>
+                <th style="padding: 10px; border: 1px solid #cbd5e1; text-align: left; width: 260px;">Title Tiếng Việt</th>
+                <th style="padding: 10px; border: 1px solid #cbd5e1; text-align: left;">Tóm tắt nội dung chi tiết</th>
+            </tr>
+        </thead>
+        <tbody>`;
+
+    let plainTextRows = ['STT\tTitle Tiếng Việt\tTóm tắt nội dung chi tiết'];
+
+    rows.forEach(tr => {
+        const tds = tr.querySelectorAll('td');
+        if (tds.length >= 3) {
+            const stt = tds[0].innerText.trim();
+            const title = tds[1].innerText.trim();
+            const descHtml = tds[2].innerHTML.trim();
+            const descText = tds[2].innerText.trim();
+
+            html += `
+            <tr>
+                <td style="padding: 10px; border: 1px solid #cbd5e1; text-align: center; vertical-align: top;">${stt}</td>
+                <td style="padding: 10px; border: 1px solid #cbd5e1; vertical-align: top; font-weight: 500;">${title}</td>
+                <td style="padding: 10px; border: 1px solid #cbd5e1; vertical-align: top; line-height: 1.5;">${descHtml}</td>
+            </tr>`;
+
+            const escapedTitle = title.replace(/"/g, '""');
+            const escapedDesc = descText.replace(/"/g, '""');
+            plainTextRows.push(`${stt}\t"${escapedTitle}"\t"${escapedDesc}"`);
+        }
+    });
+
+    html += `</tbody></table>`;
+    const plainText = plainTextRows.join('\n');
+
+    try {
+        const container = document.createElement('div');
+        container.innerHTML = html;
+        container.style.position = 'fixed';
+        container.style.left = '-9999px';
+        document.body.appendChild(container);
+
+        const selection = window.getSelection();
+        const range = document.createRange();
+        range.selectNodeContents(container);
+        selection.removeAllRanges();
+        selection.addRange(range);
+
+        document.execCommand('copy');
+        selection.removeAllRanges();
+        document.body.removeChild(container);
+
+        if (navigator.clipboard && window.ClipboardItem) {
+            navigator.clipboard.write([
+                new ClipboardItem({
+                    'text/plain': new Blob([plainText], { type: 'text/plain' }),
+                    'text/html': new Blob([html], { type: 'text/html' })
+                })
+            ]).catch(() => {});
+        }
+
+        const btn = document.getElementById('btn-copy-done-table');
+        if (btn) {
+            const origHtml = btn.innerHTML;
+            btn.innerHTML = `<i data-lucide="check" style="width: 14px; height: 14px;"></i> Đã copy!`;
+            btn.style.backgroundColor = '#10b981';
+            btn.style.borderColor = '#059669';
+            if (window.lucide) lucide.createIcons();
+            setTimeout(() => {
+                btn.innerHTML = origHtml;
+                btn.style.backgroundColor = '#3b82f6';
+                btn.style.borderColor = '#2563eb';
+                if (window.lucide) lucide.createIcons();
+            }, 2000);
+        }
+
+        alert("Đã copy bảng thông tin task hoàn thành vào Clipboard!\nBạn có thể dán (Ctrl+V) vào Excel, Word, Google Sheets, Zalo, Teams...");
+    } catch (e) {
+        console.error("Copy done task table failed", e);
+        alert("Lỗi khi copy. Trình duyệt của bạn có thể không hỗ trợ tính năng này.");
+    }
+}
 
 function copyMilestoneTable() {
     const tasks = getMilestoneTasks();
@@ -2394,6 +2486,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     const btnDoneInfo = document.getElementById('btn-done-task-info');
     if (btnDoneInfo) btnDoneInfo.addEventListener('click', showDoneTaskInfo);
+
+    const btnCopyDoneTable = document.getElementById('btn-copy-done-table');
+    if (btnCopyDoneTable) btnCopyDoneTable.addEventListener('click', copyDoneTaskTable);
 
     const btnAiEval = document.getElementById('btn-ai-eval-comments');
     if (btnAiEval) btnAiEval.addEventListener('click', evaluateMilestoneTaskCommentsWithGemini);
