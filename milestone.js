@@ -851,21 +851,9 @@ function renderUnassignedTasks() {
     lucide.createIcons();
 }
 
-function renderDoneUnassignedTasks() {
-    const tbody = document.getElementById('done-unassigned-tbody');
-    const emptyState = document.getElementById('done-unassigned-empty');
-    const countEl = document.getElementById('done-unassigned-count');
-    
-    if (!tbody || !emptyState || !countEl) return;
-
+function getDoneUnassignedTasks() {
     const ms = msState.currentMilestone ? msState.milestones[msState.currentMilestone] : null;
-    
-    if (!ms) {
-        tbody.innerHTML = '';
-        emptyState.classList.remove('hidden');
-        countEl.textContent = '0';
-        return;
-    }
+    if (!ms || !ms.startDate || !ms.endDate) return [];
     
     let msStart = new Date(ms.startDate).setHours(0, 0, 0, 0);
     let msEnd = new Date(ms.endDate).setHours(23, 59, 59, 999);
@@ -895,6 +883,26 @@ function renderDoneUnassignedTasks() {
         return dateB - dateA;
     });
 
+    return doneUnassigned;
+}
+
+function renderDoneUnassignedTasks() {
+    const tbody = document.getElementById('done-unassigned-tbody');
+    const emptyState = document.getElementById('done-unassigned-empty');
+    const countEl = document.getElementById('done-unassigned-count');
+    
+    if (!tbody || !emptyState || !countEl) return;
+
+    const ms = msState.currentMilestone ? msState.milestones[msState.currentMilestone] : null;
+    
+    if (!ms) {
+        tbody.innerHTML = '';
+        emptyState.classList.remove('hidden');
+        countEl.textContent = '0';
+        return;
+    }
+
+    const doneUnassigned = getDoneUnassignedTasks();
     countEl.textContent = doneUnassigned.length;
 
     if (doneUnassigned.length === 0) {
@@ -2051,10 +2059,23 @@ async function showDoneTaskInfo() {
         return;
     }
     const ms = msState.milestones[msId];
-    const tasks = getMilestoneTasks().filter(t => getTaskStatus(t) === 'done');
+
+    // 1. Task hoàn thành đã nằm trong Milestone
+    const msDoneTasks = getMilestoneTasks().filter(t => getTaskStatus(t) === 'done');
+
+    // 2. Task hoàn thành chưa nằm trong Milestone
+    const unassignedDoneTasks = getDoneUnassignedTasks();
+
+    // Kết hợp cả hai danh sách (ưu tiên task trong milestone trước, không trùng lặp)
+    const tasks = [...msDoneTasks];
+    unassignedDoneTasks.forEach(t => {
+        if (!tasks.some(existing => String(existing.id) === String(t.id))) {
+            tasks.push(t);
+        }
+    });
 
     document.getElementById('done-modal-ms-name').textContent = ms.name || '';
-    document.getElementById('done-modal-ms-end').textContent = ms.due_date ? formatDateVN(ms.due_date) : 'Không có';
+    document.getElementById('done-modal-ms-end').textContent = ms.endDate ? formatDateVN(ms.endDate) : (ms.due_date ? formatDateVN(ms.due_date) : 'Không có');
 
     const tbody = document.getElementById('done-modal-tbody');
     tbody.innerHTML = '';
