@@ -163,6 +163,56 @@ async function fetchProjectTasks() {
         }
     }
 
+    // 1.1 Enrich Project 39 issues that have label 'DONE' with resource_label_events
+    const assignedIds = getAllAssignedTaskIds();
+    const ninetyDaysAgo = Date.now() - 90 * 24 * 60 * 60 * 1000;
+    const p39DoneIssues = msState.allTasks.filter(t => 
+        String(t.project_id) === String(PROJECT_ID) &&
+        !assignedIds.has(String(t.id)) &&
+        (t.labels || []).some(l => l.toLowerCase() === 'done') &&
+        new Date(t.updated_at || t.created_at).getTime() >= ninetyDaysAgo
+    );
+
+    let cachedDoneDates = {};
+    try {
+        cachedDoneDates = JSON.parse(localStorage.getItem('cached_done_dates_p39') || '{}');
+    } catch (e) { }
+
+    let cacheUpdated = false;
+    await Promise.all(p39DoneIssues.map(async i => {
+        const taskId = String(i.id || i.iid);
+        if (cachedDoneDates[taskId]) {
+            i.done_date = cachedDoneDates[taskId];
+            return;
+        }
+        try {
+            const evRes = await fetch(`${GITLAB_BASE_URL}/projects/${PROJECT_ID}/issues/${i.iid}/resource_label_events`, { headers });
+            if (evRes.ok) {
+                const events = await evRes.json();
+                if (Array.isArray(events)) {
+                    const addEvents = events.filter(e => e.action === 'add' && e.label && e.label.name && e.label.name.toLowerCase() === 'done');
+                    if (addEvents.length > 0) {
+                        addEvents.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+                        i.done_date = addEvents[0].created_at;
+                        cachedDoneDates[taskId] = i.done_date;
+                        cacheUpdated = true;
+                    }
+                }
+            }
+        } catch (e) { }
+        if (!i.done_date) {
+            i.done_date = i.closed_at || i.updated_at || i.created_at;
+            cachedDoneDates[taskId] = i.done_date;
+            cacheUpdated = true;
+        }
+    }));
+
+    if (cacheUpdated) {
+        try {
+            localStorage.setItem('cached_done_dates_p39', JSON.stringify(cachedDoneDates));
+        } catch (e) { }
+    }
+
     // 2. Fetch opened & closed issues for Project 101 (1C:E-Invoice)
     const einvoiceIssues = [];
     for (const stateParam of ['opened', 'closed']) {
@@ -830,12 +880,19 @@ function renderDoneUnassignedTasks() {
         const isDone = t.state === 'closed' || labels.includes('done');
         
         if (isDone) {
-            const taskDateStr = t.closed_at || t.updated_at || t.created_at;
+            const taskDateStr = t.done_date || t.closed_at || t.updated_at || t.created_at;
             const taskTime = new Date(taskDateStr).getTime();
             return taskTime >= msStart && taskTime <= msEnd;
         }
         
         return false;
+    });
+
+    // Sắp xếp ngày hoàn thành mới nhất lên trên
+    doneUnassigned.sort((a, b) => {
+        const dateA = new Date(a.done_date || a.closed_at || a.updated_at || a.created_at).getTime();
+        const dateB = new Date(b.done_date || b.closed_at || b.updated_at || b.created_at).getTime();
+        return dateB - dateA;
     });
 
     countEl.textContent = doneUnassigned.length;
@@ -874,6 +931,7 @@ function renderDoneUnassignedTasks() {
         tr.style.background = '#f0fdf4';
         
         const authorHtml = task.author ? `<span class="ms-assignee-badge" style="background:#e2e8f0; color:#475569; border:none;">${TEAM_NAMES[task.author.username] || task.author.username || task.author.name}</span>` : '<span style="color:#94a3b8;font-size:11px;">—</span>';
+        const displayDate = task.done_date || task.closed_at || task.updated_at || task.created_at;
         
         tr.innerHTML = `
             <td style="text-align:center;"><input type="checkbox" data-task-id="${taskId}" ${isChecked ? 'checked' : ''}></td>
@@ -882,7 +940,7 @@ function renderDoneUnassignedTasks() {
             <td>${assigneesHtml}</td>
             <td>${authorHtml}</td>
             <td>${labelsHtml}</td>
-            <td class="ms-date-cell">${formatDateVN(task.created_at)}</td>
+            <td class="ms-date-cell">${formatDateVN(displayDate)}</td>
         `;
 
         const cb = tr.querySelector('input[type="checkbox"]');
